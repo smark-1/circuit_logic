@@ -5,16 +5,15 @@ export type NodeType = {
     id: NodeID;
     leftPercent: number;
     topPercent: number;
+    value:boolean;
 }
 
 export interface InputType extends NodeType {
     type: 'input';
-    value:boolean;
 }
 
 export interface OutputType extends NodeType {
     type: 'output';
-    value:boolean;
 }
 
 export interface ConnectionType extends NodeType {

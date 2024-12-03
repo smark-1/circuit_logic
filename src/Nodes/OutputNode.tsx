@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useEffect, useState} from "react";
 import {ConnectionType, NodeID, NodeType, OutputType} from "../types.ts";
 
 export default function OutputNode(props:{
@@ -6,8 +6,34 @@ export default function OutputNode(props:{
     setDrag:Function,
     drag:{start:null|NodeID,end:null|NodeID}
     setNodes:Function
+    nodes:{[key:string]:NodeType}
 }){
     const [on,setOn] = useState(false)
+
+    const handleConnectionStateChange=(e:CustomEvent)=>{
+        if (e.detail.to===props.node.id){
+            if(e.detail.value===false){
+                // @ts-ignore
+                const connectedNodes = Object.values(props.nodes).filter(node=>node.type==="connection" && node.to===props.node.id)
+                const value = connectedNodes.some(node=>node.value)
+                if(!value){
+                    setOn(false);
+                }
+            }
+            else {
+                setOn(true)
+            }
+        }
+    }
+    useEffect(()=>{
+        // @ts-ignore
+        window.addEventListener("connectionStateChange",handleConnectionStateChange)
+        return ()=>{
+            // @ts-ignore
+            window.removeEventListener("connectionStateChange",handleConnectionStateChange)
+        }
+    },[props.nodes])
+
 
     return (
         <div onClick={()=>setOn(val=>!val)}
@@ -26,6 +52,7 @@ export default function OutputNode(props:{
                                 to:props.node.id,
                                 leftPercent:0,
                                 topPercent:0,
+                                value:false
                             }
                             return {...nodes,[id]:connectionNode}
                         })

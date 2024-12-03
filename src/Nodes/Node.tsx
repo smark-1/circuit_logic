@@ -12,17 +12,18 @@ export default function Node(props  : {
     let element = <p>el</p>
     switch (props.node.type){
         case "input":
-            element = <InputNode node={props.node as InputType } setDrag={props.setDrag}/>
+            element = <InputNode node={props.node as InputType } setDrag={props.setDrag} setNodes={props.setNodes}/>
             break
         case "output":
             element = <OutputNode
                 node={props.node as OutputType}
+                nodes={props.nodes}
                 setDrag={props.setDrag}
                 drag={props.drag}
                 setNodes={props.setNodes}/>
             break
         case "connection":
-            element = <ConnectionNode node={props.node as ConnectionType} nodes={props.nodes} />
+            element = <ConnectionNode node={props.node as ConnectionType} nodes={props.nodes} setNodes={props.setNodes} />
             break
     }
 

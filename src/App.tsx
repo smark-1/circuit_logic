@@ -46,6 +46,8 @@ function App() {
         const boundingRect = e.currentTarget.getBoundingClientRect()
         setMousePos({x:e.clientX-boundingRect.left,y:e.clientY-boundingRect.top,width: boundingRect.width,height: boundingRect.height})
     }
+
+
     return (
         <div className={"w-full h-screen bg-slate-900 p-8"}>
             <div className={"w-full h-full bg-slate-800 relative"}
@@ -72,7 +74,6 @@ function App() {
                 </div>}
 
             </div>
-            <p>start - {drag.start} ; end - {drag.end}</p>
         </div>
     )
 }

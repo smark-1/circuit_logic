@@ -1,8 +1,16 @@
-import {useState} from "react";
+import {useEffect, useState} from "react";
 import {InputType} from "../types.ts";
 
-export default function InputNode(props:{node:InputType,setDrag:Function}){
+export default function InputNode(props:{node:InputType,setDrag:Function,setNodes:Function}){
     const [on,setOn] = useState(false)
+
+    useEffect(()=>{
+        const event = new CustomEvent("inputStateChange",{detail:{id:props.node.id,value:on}});
+        window.dispatchEvent(event)
+        props.setNodes((nodes:{[key:string]:InputType})=>{
+            return {...nodes,[props.node.id]:{...props.node,value:on}}
+        })
+    },[on])
 
     return (
         <div onClick={()=>setOn(val=>!val)}
