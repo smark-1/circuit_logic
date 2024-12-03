@@ -36,7 +36,7 @@ export default function OutputNode(props:{
 
 
     return (
-        <div onClick={()=>setOn(val=>!val)}
+        <div
              onDrop={(e)=>{
                     e.preventDefault();
                     if(props.drag.start!==null){

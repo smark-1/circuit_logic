@@ -1,7 +1,8 @@
-import {ConnectionType, InputType, NodeType, OutputType} from "../types";
+import {ChipType, ConnectionType, InputType, NodeType, OutputType} from "../types";
 import InputNode from "./InputNode.tsx";
 import OutputNode from "./OutputNode.tsx";
 import ConnectionNode from "./ConnectionNode.tsx";
+import Chip from "../Gates/Chip.tsx";
 
 export default function Node(props  : {
     node:NodeType,
@@ -22,9 +23,14 @@ export default function Node(props  : {
                 drag={props.drag}
                 setNodes={props.setNodes}/>
             break
+
         case "connection":
             element = <ConnectionNode node={props.node as ConnectionType} nodes={props.nodes} setNodes={props.setNodes} />
             break
+
+        case "chip":
+            element = <Chip chip={props.node as ChipType} />
+            break;
     }
 
     if (props.node.type==="connection"){

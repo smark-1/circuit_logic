@@ -25,19 +25,28 @@ export default function ConnectionNode(props:{
 
     useEffect(()=>{
         // @ts-ignore
-        window.addEventListener("inputStateChange",(e:CustomEvent)=>{
+        const inputChange = window.addEventListener("inputStateChange",(e:CustomEvent)=>{
             if (e.detail.id===props.node.from){
                 setOn(e.detail.value)
             }
         })
+        return ()=>{
+            // @ts-ignore
+            window.removeEventListener("inputStateChange",inputChange)
+        }
     },[])
 
     useEffect(()=>{
-        if(!lineRef.current) return;
-        // @ts-ignore
-        setStrokeTotalLength(lineRef.current.getTotalLength())
-    },[lineRef.current])
+        if(!lineRef.current){
+            return;
+        }
 
+        setTimeout(()=>{
+                // @ts-ignore
+                setStrokeTotalLength(lineRef.current.getTotalLength())
+        }
+        ,50)
+    },[])
 
     return (
         <div className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}>
@@ -56,7 +65,7 @@ export default function ConnectionNode(props:{
                     // key={props.node.id}
                     variants={variants}
                     animate={on ? "on" : "off"}
-                    transition={{duration: 2}}
+                    transition={{duration: strokeTotalLength/1000}}
                     onAnimationComplete={()=>{
                         props.setNodes((nodes:{[key:string]:NodeType})=>{
                             return {...nodes,[props.node.id]:{...props.node,value:on}}

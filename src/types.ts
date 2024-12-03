@@ -1,7 +1,7 @@
 export type NodeID = string;
 
 export type NodeType = {
-    type: 'input' | 'output'|"connection";
+    type: 'input' | 'output'|"connection" | "chip";
     id: NodeID;
     leftPercent: number;
     topPercent: number;
@@ -20,4 +20,12 @@ export interface ConnectionType extends NodeType {
     type: 'connection';
     from: NodeID;
     to: NodeID;
+}
+
+export interface ChipType extends NodeType {
+    type: 'chip';
+    inputs: NodeID[];
+    outputs: NodeID[];
+    nodes:{[key:string]:NodeType};
+    name:string;
 }
