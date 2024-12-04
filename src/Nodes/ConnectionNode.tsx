@@ -1,5 +1,5 @@
-import {ConnectionType, NodeType} from "../types.ts";
-import { motion } from "motion/react"
+import {ChipType, ConnectionType, NodeType} from "../types.ts";
+import {motion} from "motion/react"
 import {useEffect, useRef, useState} from "react";
 
 export default function ConnectionNode(props:{
@@ -7,9 +7,29 @@ export default function ConnectionNode(props:{
     nodes: {[key: string]: NodeType}
     setNodes:Function
 }){
+    const rectRef = useRef<HTMLDivElement>()
+    let nodesList = {...props.nodes}
+
+    // @ts-ignore
+    let chipPercentWidth = 128/(rectRef.current?.offsetWidth)*100
+    // @ts-ignore
+    let chipPercentHeight = 128/(rectRef.current?.offsetHeight)*100
+
+    // @ts-ignore
+    Object.values(nodesList).filter(node=>node.type==="chip").forEach((node:ChipType)=>{
+        Object.values(node.nodes).filter(node=>['input','output'].includes(node.type))
+            .forEach((IOnode:NodeType)=>{
+                nodesList[IOnode.id] = {
+                    ...IOnode,
+                    leftPercent: node.leftPercent - chipPercentWidth / 2,
+                    topPercent: node.topPercent - chipPercentHeight / 2 + IOnode.topPercent * chipPercentHeight / 100
+                }
+            })
+    })
+
     const [on,setOn] = useState(false)
-    const fromNode = props.nodes[props.node.from]
-    const toNode = props.nodes[props.node.to]
+    const fromNode = nodesList[props.node.from]
+    const toNode = nodesList[props.node.to] ?? {leftPercent:50,topPercent:50}
     const lineRef = useRef()
     const [strokeTotalLength,setStrokeTotalLength] = useState(10000)
 
@@ -49,7 +69,8 @@ export default function ConnectionNode(props:{
     },[])
 
     return (
-        <div className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}>
+        // @ts-ignore
+        <div ref={rectRef} className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}>
 
             <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg" >
                 <line

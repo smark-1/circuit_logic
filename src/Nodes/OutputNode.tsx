@@ -6,6 +6,7 @@ export default function OutputNode(props:{
     setDrag:Function,
     drag:{start:null|NodeID,end:null|NodeID}
     setNodes:Function
+    isChipOutput?:boolean
     nodes:{[key:string]:NodeType}
 }){
     const [on,setOn] = useState(false)
@@ -37,6 +38,7 @@ export default function OutputNode(props:{
 
     return (
         <div
+
              onDrop={(e)=>{
                     e.preventDefault();
                     if(props.drag.start!==null){

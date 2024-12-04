@@ -2,14 +2,14 @@ import {ChipType} from "../types.ts";
 import Node from "../Nodes/Node.tsx";
 import {useState} from "react";
 
-export default function Chip(props:{chip:ChipType}){
+export default function Chip(props:{chip:ChipType,setParentNodes:Function,drag:{start:null|string,end:null|string},setDrag:Function}){
     const [nodeState,setNodeState] = useState(props.chip.nodes)
 
     const reactNodes = Object.values(nodeState).filter(node=>!['input','output'].includes(node.type)).map((node)=>{
         return <Node node={node}
                      key={node.id}
-                     drag={{start:null,end:null}}
-                     setDrag={()=>{}}
+                     drag={props.drag}
+                     setDrag={props.setDrag}
                      nodes={nodeState}
                      setNodes={setNodeState}
         />
@@ -18,19 +18,22 @@ export default function Chip(props:{chip:ChipType}){
     const inputNodes = Object.values(nodeState).filter(node=>node.type==='input').map((node)=>{
         return <Node node={node}
                      key={node.id}
-                     drag={{start:null,end:null}}
-                     setDrag={()=>{}}
+                     drag={props.drag}
+                     setDrag={props.setDrag}
                      nodes={nodeState}
                      setNodes={setNodeState}
+                     setParentNodes={props.setParentNodes}
+                     isChipIO={true}
         />
     })
     const outputNodes = Object.values(nodeState).filter(node=>node.type==='output').map((node)=>{
         return <Node node={node}
                      key={node.id}
                      drag={{start:null,end:null}}
-                     setDrag={()=>{}}
+                     setDrag={props.setDrag}
                      nodes={nodeState}
                      setNodes={setNodeState}
+                     isChipIO={true}
         />
     })
 
@@ -40,8 +43,8 @@ export default function Chip(props:{chip:ChipType}){
             {outputNodes}
             <div className={"relative w-32 h-32 scale-50 pointer-events-none"}>
                 {reactNodes}
+                <p className={'text-2xl text-gray-50'}>{props.chip.name}</p>
             </div>
-            <p className={'text-2xl text-gray-50'}>{props.chip.name}</p>
         </div>
     )
 }
