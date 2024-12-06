@@ -5,6 +5,7 @@ export type NodeType = {
     id: NodeID;
     leftPercent: number;
     topPercent: number;
+    onMainCanvas:boolean;
     value:boolean;
 }
 

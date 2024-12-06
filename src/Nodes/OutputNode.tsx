@@ -1,21 +1,20 @@
-import {useEffect, useState} from "react";
-import {ConnectionType, NodeID, NodeType, OutputType} from "../types.ts";
+import {useContext, useEffect, useState} from "react";
+import {ConnectionType, NodeType, OutputType} from "../types.ts";
+import {dragContext, nodeContext} from "../appContext.ts";
 
 export default function OutputNode(props:{
     node:OutputType,
-    setDrag:Function,
-    drag:{start:null|NodeID,end:null|NodeID}
-    setNodes:Function
     isChipOutput?:boolean
-    nodes:{[key:string]:NodeType}
 }){
     const [on,setOn] = useState(false)
+    const nodesContext = useContext(nodeContext)
+    const drag = useContext(dragContext)
 
     const handleConnectionStateChange=(e:CustomEvent)=>{
         if (e.detail.to===props.node.id){
             if(e.detail.value===false){
                 // @ts-ignore
-                const connectedNodes = Object.values(props.nodes).filter(node=>node.type==="connection" && node.to===props.node.id)
+                const connectedNodes = Object.values(nodesContext.nodes).filter(node=>node.type==="connection" && node.to===props.node.id)
                 const value = connectedNodes.some(node=>node.value)
                 if(!value){
                     setOn(false);
@@ -33,28 +32,38 @@ export default function OutputNode(props:{
             // @ts-ignore
             window.removeEventListener("connectionStateChange",handleConnectionStateChange)
         }
-    },[props.nodes])
+    },[nodesContext.nodes])
 
 
     return (
         <div
-
+                draggable={true}
+                onDragStart={(e)=>{
+                    if(props.isChipOutput){
+                        e.dataTransfer.setDragImage(new Image(),0,0)
+                        drag.setDrag({start:props.node.id,end:null})
+                    }else{
+                        e.preventDefault()
+                    }
+                }
+                }
              onDrop={(e)=>{
                     e.preventDefault();
-                    if(props.drag.start!==null){
-                        props.setDrag({start:null,end:null})
-                        props.setNodes((nodes:{[key:string]:NodeType})=>{
+                    if(drag.drag.start!==null){
+                        drag.setDrag({start:null,end:null})
+                        nodesContext.setNodes((nodes:{[key:string]:NodeType})=>{
                             const id = Math.random().toString()
 
                             const connectionNode: ConnectionType = {
                                 id:id,
                                 type:"connection",
                                 // @ts-ignore
-                                from:props.drag.start,
+                                from:drag.drag.start,
                                 to:props.node.id,
                                 leftPercent:0,
                                 topPercent:0,
-                                value:false
+                                value:false,
+                                onMainCanvas:true
                             }
                             return {...nodes,[id]:connectionNode}
                         })

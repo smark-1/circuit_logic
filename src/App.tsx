@@ -1,6 +1,7 @@
 import Node from "./Nodes/Node.tsx";
 import {useState} from "react";
 import {InputType, OutputType, NodeType, NodeID, ChipType} from "./types.ts";
+import {dragContext, nodeContext } from "./appContext.ts";
 
 function GetAllIds(nodes:{[key:string]:NodeType}):NodeID[]{
     let ids:NodeID[] = []
@@ -31,7 +32,7 @@ function App() {
 
         const id = Math.random().toString()
 
-        let newNode = {id:id,leftPercent:(x/rect.width)*100,topPercent:(y/rect.height)*100} as NodeType
+        let newNode = {id:id,leftPercent:(x/rect.width)*100,topPercent:(y/rect.height)*100,onMainCanvas:true} as NodeType
         if (newNode.leftPercent<=6){
             newNode = {...newNode,type:"input",leftPercent: 0,value:false} as InputType
         }else if (newNode.leftPercent>=94){
@@ -49,20 +50,17 @@ function App() {
                 }
                 chip = JSON.parse(chipString)
                 newNode = {...newNode,type:"chip",inputs:chip.inputs,outputs:chip.outputs,nodes:chip.nodes,name:chip.name} as ChipType
+                setNodes(nodes=>({...nodes,...chip.nodes}))
             }else{
                 return;
             }
         }
 
-        setNodes({...nodes,[id]:newNode})
+        setNodes(nodes=>({...nodes,[id]:newNode}))
     }
-    const reactNodes = Object.values(nodes).map((node)=>{
+    const reactNodes = Object.values(nodes).filter(node=>node.onMainCanvas).map((node)=>{
         return <Node node={node}
                      key={node.id}
-                     drag={drag}
-                     setDrag={setDrag}
-                     nodes={nodes}
-                     setNodes={setNodes}
         />
     })
 
@@ -79,6 +77,8 @@ function App() {
 
 
     return (
+        <nodeContext.Provider value={{nodes,setNodes}}>
+            <dragContext.Provider value={{drag,setDrag}}>
         <div className={"w-full h-screen bg-slate-900 p-8 flex"}>
             <div className={"w-[80vw] h-full bg-slate-800 relative"}
                  /* @ts-ignore */
@@ -109,22 +109,31 @@ function App() {
                 <button onClick={()=>{
                     const name = prompt("Chip name")
                     const id = Math.random().toString()
+                    // set all nodes to not be on main canvas
+                    const nodeCopy = JSON.parse(JSON.stringify(nodes))
+                    for(const id in nodeCopy){
+                        nodeCopy[id].onMainCanvas = false
+                    }
                     // @ts-ignore
                     const chip:ChipType = {
                         id:id,
                         type:"chip",
-                        nodes:{...nodes},
+
+                        nodes:{...nodeCopy},
                         // @ts-ignore
                         name:name,
                         // @ts-ignore
                         inputs:[Object.values(nodes).filter(node=>node.type==="input").map(node=>node.id)],
                         // @ts-ignore
-                        outputs:[Object.values(nodes).filter(node=>node.type==="output").map(node=>node.id)]
+                        outputs:[Object.values(nodes).filter(node=>node.type==="output").map(node=>node.id)],
+                        onMainCanvas:false
                     }
                     setChips({...chips,[id]:chip})
                 }}>save as chip</button>
             </div>
         </div>
+            </dragContext.Provider>
+        </nodeContext.Provider>
     )
 }
 

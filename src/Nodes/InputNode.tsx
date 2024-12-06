@@ -1,23 +1,18 @@
-import {useEffect, useState} from "react";
+import {useContext, useEffect, useState} from "react";
 import {ConnectionType, InputType, NodeType} from "../types.ts";
+import {dragContext, nodeContext} from "../appContext.ts";
 
 export default function InputNode(props:{
     node:InputType,
-    nodes:{[key:string]:NodeType},
-    setDrag:Function,
-    setNodes:Function,
     isChipInput?:boolean,
-    drag:{start:null|string,end:null|string}
-    setParentNodes?:Function
 }){
     const [on,setOn] = useState(false)
-
-
+    const nodesContext = useContext(nodeContext)
+    const drag = useContext(dragContext)
     const handleConnectionStateChange=(e:CustomEvent)=>{
         if (e.detail.to===props.node.id){
             if(e.detail.value===false){
-                // @ts-ignore
-                const connectedNodes = Object.values(props.nodes).filter(node=>node.type==="connection" && node.to===props.node.id)
+                const connectedNodes = Object.values(nodesContext.nodes).filter(node=>node.type==="connection" && node.to===props.node.id)
                 const value = connectedNodes.some(node=>node.value)
                 if(!value){
                     setOn(false);
@@ -31,7 +26,8 @@ export default function InputNode(props:{
     useEffect(()=>{
         const event = new CustomEvent("inputStateChange",{detail:{id:props.node.id,value:on}});
         window.dispatchEvent(event)
-        props.setNodes((nodes:{[key:string]:InputType})=>{
+        // @ts-ignore
+        nodesContext.setNodes((nodes:{[key:string]:InputType})=>{
             return {...nodes,[props.node.id]:{...props.node,value:on}}
         })
     },[on])
@@ -49,7 +45,7 @@ export default function InputNode(props:{
                 window.removeEventListener("connectionStateChange",handleConnectionStateChange)
             }
         }
-    },[props.nodes])
+    },[nodesContext.nodes])
 
 
     return (
@@ -65,7 +61,7 @@ export default function InputNode(props:{
                      e.preventDefault()
                  }else{
                      e.dataTransfer.setDragImage(new Image(),0,0)
-                     props.setDrag({start:props.node.id,end:null})
+                     drag.setDrag({start:props.node.id,end:null})
                  }
              }
              }
@@ -73,21 +69,22 @@ export default function InputNode(props:{
                     (e)=>{
                         console.log("drop",e)
                         e.preventDefault();
-                        if(props.isChipInput && props.drag.start!==null){
-                            props.setDrag({start:null,end:null})
+                        if(props.isChipInput && drag.drag.start!==null){
+                            drag.setDrag({start:null,end:null})
                             // @ts-ignore
-                            props.setParentNodes((nodes:{[key:string]:NodeType})=>{
+                            nodesContext.setNodes((nodes:{[key:string]:NodeType})=>{
                                 const id = Math.random().toString()
                                 console.log("new connection to",props.node.id)
                                 const connectionNode: ConnectionType = {
                                     id:id,
                                     type:"connection",
                                     // @ts-ignore
-                                    from:props.drag.start,
+                                    from:drag.drag.start,
                                     to:props.node.id,
                                     leftPercent:0,
                                     topPercent:0,
-                                    value:false
+                                    value:false,
+                                    onMainCanvas:true
                                 }
                                 return {...nodes,[id]:connectionNode}
                             })

@@ -1,38 +1,26 @@
 import {ChipType} from "../types.ts";
 import Node from "../Nodes/Node.tsx";
-import {useState} from "react";
 
-export default function Chip(props:{chip:ChipType,setParentNodes:Function,drag:{start:null|string,end:null|string},setDrag:Function}){
-    const [nodeState,setNodeState] = useState(props.chip.nodes)
 
-    const reactNodes = Object.values(nodeState).filter(node=>!['input','output'].includes(node.type)).map((node)=>{
+export default function Chip(props:{chip:ChipType}){
+
+    const reactNodes = Object.values(props.chip.nodes).filter(node=>!['input','output'].includes(node.type)).map((node)=>{
         return <Node node={node}
                      key={node.id}
-                     drag={props.drag}
-                     setDrag={props.setDrag}
-                     nodes={nodeState}
-                     setNodes={setNodeState}
+
         />
     })
 
-    const inputNodes = Object.values(nodeState).filter(node=>node.type==='input').map((node)=>{
+    const inputNodes = Object.values(props.chip.nodes).filter(node=>node.type==='input').map((node)=>{
         return <Node node={node}
                      key={node.id}
-                     drag={props.drag}
-                     setDrag={props.setDrag}
-                     nodes={nodeState}
-                     setNodes={setNodeState}
-                     setParentNodes={props.setParentNodes}
+
                      isChipIO={true}
         />
     })
-    const outputNodes = Object.values(nodeState).filter(node=>node.type==='output').map((node)=>{
+    const outputNodes = Object.values(props.chip.nodes).filter(node=>node.type==='output').map((node)=>{
         return <Node node={node}
                      key={node.id}
-                     drag={{start:null,end:null}}
-                     setDrag={props.setDrag}
-                     nodes={nodeState}
-                     setNodes={setNodeState}
                      isChipIO={true}
         />
     })
