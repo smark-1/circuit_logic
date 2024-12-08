@@ -2,25 +2,15 @@ import Node from "./Nodes/Node.tsx";
 import {useState} from "react";
 import {InputType, OutputType, NodeType, NodeID, ChipType} from "./types.ts";
 import {dragContext, nodeContext } from "./appContext.ts";
+import {GetAllIds} from "./utils.ts";
 
-function GetAllIds(nodes:{[key:string]:NodeType}):NodeID[]{
-    let ids:NodeID[] = []
-    for (const id in nodes){
-        ids.push(id)
-        if (nodes[id].type==="chip"){
-            // @ts-ignore
-            ids.push(...GetAllIds(nodes[id].nodes))
-        }
-    }
-    return ids
-}
 
 function App() {
     const [nodes, setNodes] = useState<{[key:string]:NodeType}>({});
     const [chips, setChips] = useState<{[key:string]:ChipType}>({});
     const [drag,setDrag] = useState<{start:null|NodeID,end:null|NodeID}>({start:null,end:null})
+    const [initialDragPos,setInitialDragPos] = useState({x:0,y:0})
     const [mousePos,setMousePos] = useState({x:0,y:0,width:0,height:0})
-
     const addNode=(e:MouseEvent)=>{
         if (e.target!==e.currentTarget) return;
         // e = Mouse click event.
@@ -87,15 +77,19 @@ function App() {
                  onDragOver={(e)=>{handleMouseMove(e)
                          e.dataTransfer.dropEffect = "link";
                      e.preventDefault()
-            }} onDrop={()=>{setDrag({start:null,end:null})}}>
+            }}
+                 onDragStart={(e)=>{
+                     setInitialDragPos({x:e.pageX-32,y:e.pageY-32})
+                 }}
+                 onDrop={()=>{setDrag({start:null,end:null})}}>
                 {reactNodes}
 
                 {drag.start&&<div className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}>
 
                     <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
                         <line
-                            x1={`${nodes[drag.start].leftPercent}%`}
-                            y1={`${nodes[drag.start].topPercent}%`}
+                            x1={`${initialDragPos.x}`}
+                            y1={`${initialDragPos.y}`}
                             x2={`${mousePos.x}`} y2={`${mousePos.y}`}
                             strokeLinecap={"round"}
                             strokeLinejoin={"round"}

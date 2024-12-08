@@ -32,7 +32,7 @@ export default function OutputNode(props:{
             // @ts-ignore
             window.removeEventListener("connectionStateChange",handleConnectionStateChange)
         }
-    },[nodesContext.nodes])
+    },[])
 
 
     return (
