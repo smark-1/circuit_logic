@@ -1,5 +1,5 @@
 import {useContext, useEffect, useState} from "react";
-import {ConnectionType, NodeType, OutputType} from "../types.ts";
+import {ConnectionType, InputType, NodeType, OutputType} from "../types.ts";
 import {dragContext, nodeContext} from "../appContext.ts";
 
 export default function OutputNode(props:{
@@ -13,7 +13,6 @@ export default function OutputNode(props:{
     const handleConnectionStateChange=(e:CustomEvent)=>{
         if (e.detail.to===props.node.id){
             if(e.detail.value===false){
-                // @ts-ignore
                 const connectedNodes = Object.values(nodesContext.nodes).filter(node=>node.type==="connection" && node.to===props.node.id)
                 const value = connectedNodes.some(node=>node.value)
                 if(!value){
@@ -25,15 +24,33 @@ export default function OutputNode(props:{
             }
         }
     }
+
     useEffect(()=>{
+        const event = new CustomEvent("inputStateChange",{detail:{id:props.node.id,value:on}});
+        window.dispatchEvent(event)
         // @ts-ignore
-        window.addEventListener("connectionStateChange",handleConnectionStateChange)
+        nodesContext.setNodes((nodes:{[key:string]:InputType})=>{
+            return {...nodes,[props.node.id]:{...props.node,value:on}}
+        })
+    },[on])
+
+    useEffect(()=>{
+        setTimeout(()=>{
+            if(props.isChipOutput){
+                // @ts-ignore
+                window.addEventListener("connectionStateChange",handleConnectionStateChange)
+            }
+        },20)
+
+        // @ts-ignore
         return ()=>{
             // @ts-ignore
-            window.removeEventListener("connectionStateChange",handleConnectionStateChange)
+            if(props.isChipOutput){
+                // @ts-ignore
+                window.removeEventListener("connectionStateChange",handleConnectionStateChange)
+            }
         }
     },[])
-
 
     return (
         <div

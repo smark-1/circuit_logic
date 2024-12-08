@@ -45,7 +45,7 @@ export default function InputNode(props:{
                 window.removeEventListener("connectionStateChange",handleConnectionStateChange)
             }
         }
-    },[nodesContext.nodes])
+    },[])
 
 
     return (
@@ -67,14 +67,12 @@ export default function InputNode(props:{
              }
              onDrop={
                     (e)=>{
-                        console.log("drop",e)
                         e.preventDefault();
                         if(props.isChipInput && drag.drag.start!==null){
                             drag.setDrag({start:null,end:null})
                             // @ts-ignore
                             nodesContext.setNodes((nodes:{[key:string]:NodeType})=>{
                                 const id = Math.random().toString()
-                                console.log("new connection to",props.node.id)
                                 const connectionNode: ConnectionType = {
                                     id:id,
                                     type:"connection",
