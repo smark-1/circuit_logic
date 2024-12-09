@@ -51,6 +51,11 @@ export default function runner(nodes: { [key: string]: NodeType }, lastChange: N
             }
         }
 
+        // when a node gets deleted, the events might still be in the queue causing the next node to be a invalid reference which can cause a crash
+        if (!nodesCopy[lastChange.to]) {
+            return {changed: changedNodes, nodes: nodesCopy};
+        }
+
         const nextNode = nodesCopy[lastChange.to];
 
         const prevValue = nextNode.value;

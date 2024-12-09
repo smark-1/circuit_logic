@@ -122,7 +122,6 @@ function App() {
                          onClick={addNode}
                         /* @ts-ignore */
                          onDragOver={(e) => {
-                             console.log("drag over triggered")
                              handleMouseMove(e)
                              e.dataTransfer.dropEffect = "link";
                              e.preventDefault()
