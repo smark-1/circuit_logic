@@ -1,0 +1,297 @@
+{
+    "0.45766487215100204": {
+        "id": "0.45766487215100204",
+        "type": "chip",
+        "nodes": {
+            "0.45337246062088654": {
+                "id": "0.45337246062088654",
+                "leftPercent": 0,
+                "topPercent": 20,
+                "onMainCanvas": false,
+                "type": "input",
+                "value": false
+            },
+            "0.9910414093168279": {
+                "id": "0.9910414093168279",
+                "leftPercent": 0,
+                "topPercent": 80,
+                "onMainCanvas": false,
+                "type": "input",
+                "value": false
+            },
+            "0.6836769236423321": {
+                "id": "0.6836769236423321",
+                "leftPercent": 100,
+                "topPercent": 50,
+                "onMainCanvas": false,
+                "type": "output",
+                "value": false
+            },
+            "0.9292795574672279": {
+                "id": "0.9292795574672279",
+                "type": "connection",
+                "from": "0.9910414093168279",
+                "to": "0.6836769236423321",
+                "leftPercent": 0,
+                "topPercent": 0,
+                "value": false,
+                "onMainCanvas": false
+            },
+            "0.4733862491457499": {
+                "id": "0.4733862491457499",
+                "type": "connection",
+                "from": "0.45337246062088654",
+                "to": "0.6836769236423321",
+                "leftPercent": 0,
+                "topPercent": 0,
+                "value": false,
+                "onMainCanvas": false
+            }
+        },
+        "name": "OR",
+        "inputs": [
+            "0.45337246062088654",
+            "0.9910414093168279"
+        ],
+        "outputs": [
+            "0.6836769236423321"
+        ],
+        "onMainCanvas": false,
+        "leftPercent": 0,
+        "topPercent": 0,
+        "value": false
+    },
+
+    "0.554702187472135": {
+        "id": "0.554702187472135",
+        "type": "chip",
+        "nodes": {
+            "0.2776922449272129": {
+                "id": "0.2776922449272129",
+                "leftPercent": 20,
+                "topPercent": 20,
+                "onMainCanvas": false,
+                "type": "not",
+                "value": false
+            },
+            "0.7670201916267316": {
+                "id": "0.7670201916267316",
+                "leftPercent": 20,
+                "topPercent": 60,
+                "onMainCanvas": false,
+                "type": "not",
+                "value": false
+            },
+            "0.6350657387457825": {
+                "id": "0.6350657387457825",
+                "leftPercent": 80,
+                "topPercent": 40,
+                "onMainCanvas": false,
+                "type": "not",
+                "value": true
+            },
+            "0.7153682787984125": {
+                "id": "0.7153682787984125",
+                "leftPercent": 0,
+                "topPercent": 20,
+                "onMainCanvas": false,
+                "type": "input",
+                "value": true
+            },
+            "0.39533039339324183": {
+                "id": "0.39533039339324183",
+                "leftPercent": 0,
+                "topPercent": 80,
+                "onMainCanvas": false,
+                "type": "input",
+                "value": true
+            },
+            "0.3557056746505092": {
+                "id": "0.3557056746505092",
+                "leftPercent": 100,
+                "topPercent": 50,
+                "onMainCanvas": false,
+                "type": "output",
+                "value": true
+            },
+            "0.27921308126590383": {
+                "id": "0.27921308126590383",
+                "type": "connection",
+                "from": "0.39533039339324183",
+                "to": "0.3557056746505092",
+                "leftPercent": 0,
+                "topPercent": 0,
+                "value": true,
+                "onMainCanvas": false
+            },
+            "0.3889916713825098": {
+                "id": "0.3889916713825098",
+                "type": "connection",
+                "from": "0.7153682787984125",
+                "to": "0.3557056746505092",
+                "leftPercent": 0,
+                "topPercent": 0,
+                "value": true,
+                "onMainCanvas": false
+            },
+            "0.6472233875041311": {
+                "id": "0.6472233875041311",
+                "leftPercent": 50,
+                "topPercent": 50,
+                "onMainCanvas": false,
+                "type": "chip",
+                "inputs": [
+                    "0.7153682787984125",
+                    "0.39533039339324183"
+                ],
+                "outputs": [
+                    "0.3557056746505092"
+                ],
+                "nodes": {
+                    "0.7153682787984125": {
+                        "id": "0.7153682787984125",
+                        "leftPercent": 0,
+                        "topPercent": 20,
+                        "onMainCanvas": false,
+                        "type": "input",
+                        "value": false
+                    },
+                    "0.39533039339324183": {
+                        "id": "0.39533039339324183",
+                        "leftPercent": 0,
+                        "topPercent": 80,
+                        "onMainCanvas": false,
+                        "type": "input",
+                        "value": false
+                    },
+                    "0.3557056746505092": {
+                        "id": "0.3557056746505092",
+                        "leftPercent": 100,
+                        "topPercent": 50,
+                        "onMainCanvas": false,
+                        "type": "output",
+                        "value": false
+                    },
+                    "0.27921308126590383": {
+                        "id": "0.27921308126590383",
+                        "type": "connection",
+                        "from": "0.39533039339324183",
+                        "to": "0.3557056746505092",
+                        "leftPercent": 0,
+                        "topPercent": 0,
+                        "value": false,
+                        "onMainCanvas": false
+                    },
+                    "0.3889916713825098": {
+                        "id": "0.3889916713825098",
+                        "type": "connection",
+                        "from": "0.7153682787984125",
+                        "to": "0.3557056746505092",
+                        "leftPercent": 0,
+                        "topPercent": 0,
+                        "value": false,
+                        "onMainCanvas": false
+                    }
+                },
+                "name": "OR",
+                "value": false
+            },
+            "0.2040213939927007": {
+                "id": "0.2040213939927007",
+                "leftPercent": 100,
+                "topPercent": 50,
+                "onMainCanvas": false,
+                "type": "output",
+                "value": false
+            },
+            "0.8460910388723412": {
+                "id": "0.8460910388723412",
+                "type": "connection",
+                "from": "0.3557056746505092",
+                "to": "0.6350657387457825",
+                "leftPercent": 0,
+                "topPercent": 0,
+                "value": true,
+                "onMainCanvas": false
+            },
+            "0.7398128234884493": {
+                "id": "0.7398128234884493",
+                "type": "connection",
+                "from": "0.6350657387457825",
+                "to": "0.2040213939927007",
+                "leftPercent": 0,
+                "topPercent": 0,
+                "value": false,
+                "onMainCanvas": false
+            },
+            "0.8994952039144357": {
+                "id": "0.8994952039144357",
+                "type": "connection",
+                "from": "0.7670201916267316",
+                "to": "0.39533039339324183",
+                "leftPercent": 0,
+                "topPercent": 0,
+                "value": true,
+                "onMainCanvas": false
+            },
+            "0.10375676883811968": {
+                "id": "0.10375676883811968",
+                "type": "connection",
+                "from": "0.2776922449272129",
+                "to": "0.7153682787984125",
+                "leftPercent": 0,
+                "topPercent": 0,
+                "value": true,
+                "onMainCanvas": false
+            },
+            "0.43574076874174406": {
+                "id": "0.43574076874174406",
+                "leftPercent": 0,
+                "topPercent": 20,
+                "onMainCanvas": false,
+                "type": "input",
+                "value": false
+            },
+            "0.47842464708740784": {
+                "id": "0.47842464708740784",
+                "leftPercent": 0,
+                "topPercent": 80,
+                "onMainCanvas": false,
+                "type": "input",
+                "value": false
+            },
+            "0.11541882340139042": {
+                "id": "0.11541882340139042",
+                "type": "connection",
+                "from": "0.47842464708740784",
+                "to": "0.7670201916267316",
+                "leftPercent": 0,
+                "topPercent": 0,
+                "value": false,
+                "onMainCanvas": false
+            },
+            "0.5916433254313537": {
+                "id": "0.5916433254313537",
+                "type": "connection",
+                "from": "0.43574076874174406",
+                "to": "0.2776922449272129",
+                "leftPercent": 0,
+                "topPercent": 0,
+                "value": false,
+                "onMainCanvas": false
+            }
+        },
+        "name": "AND",
+        "inputs": [
+            "0.43574076874174406",
+            "0.47842464708740784"
+        ],
+        "outputs": [
+            "0.2040213939927007"
+        ],
+        "onMainCanvas": false,
+        "leftPercent": 0,
+        "topPercent": 0,
+        "value": false
+    }
+}

@@ -6,11 +6,11 @@ import {GetAllIds} from "./utils.ts";
 import runner from "./runner.ts";
 import Chip from "./Gates/Chip.tsx";
 import Not from "./Gates/Not.tsx";
-
+import defaultChips from './defaultChips.json';
 
 function App() {
     const [nodes, setNodes] = useState<{ [key: string]: NodeType }>({});
-    const [chips, setChips] = useState<{ [key: string]: ChipType }>({});
+    const [chips, setChips] = useState<{ [key: string]: ChipType }>(defaultChips as {[key:string]:ChipType});
     const [drag, setDrag] = useState<{ start: null | NodeID, end: null | NodeID }>({start: null, end: null})
     const [initialDragPos, setInitialDragPos] = useState({x: 0, y: 0})
     const [mousePos, setMousePos] = useState({x: 0, y: 0, width: 0, height: 0})
@@ -231,7 +231,10 @@ function App() {
                             name: name,
                             inputs: Object.values(nodes).filter(node => node.type === "input" && node.onMainCanvas).map(node => node.id),
                             outputs: Object.values(nodes).filter(node => node.type === "output" && node.onMainCanvas).map(node => node.id),
-                            onMainCanvas: false
+                            onMainCanvas: false,
+                            leftPercent: 0,
+                            topPercent: 0,
+                            value: false,
                         }
                         setChips({...chips, [id]: chip})
                         setNodes({})
