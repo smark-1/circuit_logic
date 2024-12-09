@@ -1,4 +1,4 @@
-import {ConnectionType, NodeType} from "../types.ts";
+import {ConnectionType} from "../types.ts";
 import {motion} from "motion/react"
 import {useContext, useEffect, useRef, useState} from "react";
 import {nodeContext} from "../appContext.ts";
@@ -9,7 +9,6 @@ export default function ConnectionNode(props:{
 }){
     const rectRef = useRef<HTMLDivElement>()
     const nodesContext = useContext(nodeContext)
-    const [on,setOn] = useState(false)
     const lineRef = useRef()
     const [strokeTotalLength,setStrokeTotalLength] = useState(10000)
 
@@ -24,30 +23,6 @@ export default function ConnectionNode(props:{
     }
 
     useEffect(()=>{
-        // @ts-ignore
-        const inputChange = window.addEventListener("inputStateChange",(e:CustomEvent)=>{
-            if (e.detail.id===props.node.from){
-                setOn(e.detail.value)
-
-                if(!props.node.onMainCanvas){
-                    setTimeout(()=>{
-                        nodesContext.setNodes((nodes:{[key:string]:NodeType})=>{
-                            return {...nodes,[props.node.id]:{...props.node,value:e.detail.value}}
-                        })
-                        const event = new CustomEvent("connectionStateChange",{detail:{id:props.node.id,value:e.detail.value, from:props.node.from,to:props.node.to}});
-                        window.dispatchEvent(event)
-                    },0)
-
-                }
-            }
-        })
-        return ()=>{
-            // @ts-ignore
-            window.removeEventListener("inputStateChange",inputChange)
-        }
-    },[])
-
-    useEffect(()=>{
         if(!lineRef.current){
             return;
         }
@@ -57,7 +32,7 @@ export default function ConnectionNode(props:{
                 setStrokeTotalLength(lineRef.current.getTotalLength())
         }
         ,50)
-    },[])
+    },[props.node])
 
     if(!props.node.onMainCanvas){
         return null;
@@ -82,14 +57,14 @@ export default function ConnectionNode(props:{
                 <motion.line
                     // key={props.node.id}
                     variants={variants}
-                    animate={on ? "on" : "off"}
+                    animate={props.node.value ? "on" : "off"}
                     transition={{duration: strokeTotalLength/1000}}
                     onAnimationComplete={()=>{
-                        nodesContext.setNodes((nodes:{[key:string]:NodeType})=>{
-                            return {...nodes,[props.node.id]:{...props.node,value:on}}
-                        })
-                        const event = new CustomEvent("connectionStateChange",{detail:{id:props.node.id,value:on, from:props.node.from,to:props.node.to}});
-                        window.dispatchEvent(event)
+                        // nodesContext.setNodes((nodes:{[key:string]:NodeType})=>{
+                        //     return {...nodes,[props.node.id]:{...props.node,value:on}}
+                        // })
+                        // const event = new CustomEvent("connectionStateChange",{detail:{id:props.node.id,value:on, from:props.node.from,to:props.node.to}});
+                        // window.dispatchEvent(event)
                     }}
                     x1={`${fromNode.leftPercent}%`}
                     y1={`${fromNode.topPercent}%`}

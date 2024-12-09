@@ -1,57 +1,21 @@
-import {useContext, useEffect, useState} from "react";
+import {useContext} from "react";
 import {ConnectionType, InputType, NodeType} from "../types.ts";
 import {dragContext, nodeContext} from "../appContext.ts";
 
 export default function InputNode(props:{
     node:InputType,
     isChipInput?:boolean,
+    handleTriggerChange?:(node:NodeType)=>void
 }){
-    const [on,setOn] = useState(false)
     const nodesContext = useContext(nodeContext)
     const drag = useContext(dragContext)
-    const handleConnectionStateChange=(e:CustomEvent)=>{
-        if (e.detail.to===props.node.id){
-            if(e.detail.value===false){
-                const connectedNodes = Object.values(nodesContext.nodes).filter(node=>node.type==="connection" && node.to===props.node.id)
-                const value = connectedNodes.some(node=>node.value)
-                if(!value){
-                    setOn(false);
-                }
-            }
-            else {
-                setOn(true)
-            }
-        }
-    }
-    useEffect(()=>{
-        const event = new CustomEvent("inputStateChange",{detail:{id:props.node.id,value:on}});
-        window.dispatchEvent(event)
-        // @ts-ignore
-        nodesContext.setNodes((nodes:{[key:string]:InputType})=>{
-            return {...nodes,[props.node.id]:{...props.node,value:on}}
-        })
-    },[on])
-
-    useEffect(()=>{
-        if(props.isChipInput){
-            // @ts-ignore
-            window.addEventListener("connectionStateChange",handleConnectionStateChange)
-        }
-        // @ts-ignore
-        return ()=>{
-            // @ts-ignore
-            if(props.isChipInput){
-                // @ts-ignore
-                window.removeEventListener("connectionStateChange",handleConnectionStateChange)
-            }
-        }
-    },[])
-
 
     return (
         <div onClick={()=>{
             if(!props.isChipInput){
-                setOn(val=>!val)
+                if(props.handleTriggerChange) {
+                    props.handleTriggerChange(props.node)
+                }
             }
         }
         }
@@ -70,7 +34,6 @@ export default function InputNode(props:{
                         e.preventDefault();
                         if(props.isChipInput && drag.drag.start!==null){
                             drag.setDrag({start:null,end:null})
-                            // @ts-ignore
                             nodesContext.setNodes((nodes:{[key:string]:NodeType})=>{
                                 const id = Math.random().toString()
                                 const connectionNode: ConnectionType = {
@@ -94,6 +57,6 @@ export default function InputNode(props:{
                      e.preventDefault()
                  }
              }}
-             className={`${on?"bg-red-700":"bg-red-300"} border-2 w-7 h-7 rounded-full duration-100 ${!props.isChipInput&&'hover:bg-red-500'}`}></div>
+             className={`${props.node.value?"bg-red-700":"bg-red-300"} border-2 w-7 h-7 rounded-full duration-100 ${!props.isChipInput&&'hover:bg-red-500'}`}></div>
     )
 }

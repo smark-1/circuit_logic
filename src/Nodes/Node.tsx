@@ -7,6 +7,7 @@ import Chip from "../Gates/Chip.tsx";
 export default function Node(props  : {
     node:NodeType,
     isChipIO?:boolean
+    handleTriggerChange?:(node:NodeType)=>void
 }){
     let element = <p>el</p>
     switch (props.node.type){
@@ -14,6 +15,7 @@ export default function Node(props  : {
             element = <InputNode
                 node={props.node as InputType }
                 isChipInput={props.isChipIO}
+                handleTriggerChange={props.handleTriggerChange}
             />
             break
         case "output":

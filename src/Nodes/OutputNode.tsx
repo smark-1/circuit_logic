@@ -1,56 +1,13 @@
-import {useContext, useEffect, useState} from "react";
-import {ConnectionType, InputType, NodeType, OutputType} from "../types.ts";
+import {useContext} from "react";
+import {ConnectionType, NodeBaseType, OutputType} from "../types.ts";
 import {dragContext, nodeContext} from "../appContext.ts";
 
 export default function OutputNode(props:{
     node:OutputType,
     isChipOutput?:boolean
 }){
-    const [on,setOn] = useState(false)
     const nodesContext = useContext(nodeContext)
     const drag = useContext(dragContext)
-
-    const handleConnectionStateChange=(e:CustomEvent)=>{
-        if (e.detail.to===props.node.id){
-            if(e.detail.value===false){
-                const connectedNodes = Object.values(nodesContext.nodes).filter(node=>node.type==="connection" && node.to===props.node.id)
-                const value = connectedNodes.some(node=>node.value)
-                if(!value){
-                    setOn(false);
-                }
-            }
-            else {
-                setOn(true)
-            }
-        }
-    }
-
-    useEffect(()=>{
-        const event = new CustomEvent("inputStateChange",{detail:{id:props.node.id,value:on}});
-        window.dispatchEvent(event)
-        // @ts-ignore
-        nodesContext.setNodes((nodes:{[key:string]:InputType})=>{
-            return {...nodes,[props.node.id]:{...props.node,value:on}}
-        })
-    },[on])
-
-    useEffect(()=>{
-        setTimeout(()=>{
-            if(props.isChipOutput){
-                // @ts-ignore
-                window.addEventListener("connectionStateChange",handleConnectionStateChange)
-            }
-        },20)
-
-        // @ts-ignore
-        return ()=>{
-            // @ts-ignore
-            if(props.isChipOutput){
-                // @ts-ignore
-                window.removeEventListener("connectionStateChange",handleConnectionStateChange)
-            }
-        }
-    },[])
 
     return (
         <div
@@ -68,7 +25,7 @@ export default function OutputNode(props:{
                     e.preventDefault();
                     if(drag.drag.start!==null){
                         drag.setDrag({start:null,end:null})
-                        nodesContext.setNodes((nodes:{[key:string]:NodeType})=>{
+                        nodesContext.setNodes((nodes:{[key:string]:NodeBaseType})=>{
                             const id = Math.random().toString()
 
                             const connectionNode: ConnectionType = {
@@ -89,6 +46,6 @@ export default function OutputNode(props:{
                 onDragOver={(e)=>{
                     e.preventDefault();
                 }}
-             className={`${on?"bg-green-700":"bg-gray-300"} border-2 w-7 h-7 rounded-full duration-100`}></div>
+             className={`${props.node.value?"bg-green-700":"bg-gray-300"} border-2 w-7 h-7 rounded-full duration-100`}></div>
     )
 }
