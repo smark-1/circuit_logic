@@ -1,5 +1,5 @@
 import {useContext} from "react";
-import {ConnectionType, NodeBaseType, OutputType} from "../types.ts";
+import {ConnectionType, NodeType, OutputType} from "../types.ts";
 import {dragContext, nodeContext} from "../appContext.ts";
 
 export default function OutputNode(props:{
@@ -25,7 +25,7 @@ export default function OutputNode(props:{
                     e.preventDefault();
                     if(drag.drag.start!==null){
                         drag.setDrag({start:null,end:null})
-                        nodesContext.setNodes((nodes:{[key:string]:NodeBaseType})=>{
+                        nodesContext.setNodes((nodes:{[key:string]:NodeType})=>{
                             const id = Math.random().toString()
 
                             const connectionNode: ConnectionType = {

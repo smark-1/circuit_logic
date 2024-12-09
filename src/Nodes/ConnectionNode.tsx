@@ -40,6 +40,8 @@ export default function ConnectionNode(props:{
     const nodesList = getNodes({...nodesContext.nodes},rectRef)
     const fromNode = nodesList[props.node.from]
     const toNode = nodesList[props.node.to]
+    // @ts-ignore
+    const chipPercentWidth = 128/(rectRef.current?.offsetWidth)*100
     return (
         // @ts-ignore
         <div ref={rectRef} className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}>
@@ -48,9 +50,10 @@ export default function ConnectionNode(props:{
                 <line
                     /* @ts-ignore */
                     ref={lineRef}
-                    x1={`${fromNode.leftPercent}%`}
                     y1={`${fromNode.topPercent}%`}
-                    x2={`${toNode.leftPercent}%`} y2={`${toNode.topPercent}%`}
+                    x1={`${fromNode.type==='not'?fromNode.leftPercent+chipPercentWidth/2:fromNode.leftPercent}%`}
+                    x2={`${toNode.type==="not"?toNode.leftPercent-chipPercentWidth/2:toNode.leftPercent}%`}
+                    y2={`${toNode.topPercent}%`}
                     strokeLinecap={"round"}
                     strokeLinejoin={"round"}
                     style={{stroke: "pink", strokeWidth: 4}}/>
@@ -59,16 +62,9 @@ export default function ConnectionNode(props:{
                     variants={variants}
                     animate={props.node.value ? "on" : "off"}
                     transition={{duration: strokeTotalLength/1000}}
-                    onAnimationComplete={()=>{
-                        // nodesContext.setNodes((nodes:{[key:string]:NodeType})=>{
-                        //     return {...nodes,[props.node.id]:{...props.node,value:on}}
-                        // })
-                        // const event = new CustomEvent("connectionStateChange",{detail:{id:props.node.id,value:on, from:props.node.from,to:props.node.to}});
-                        // window.dispatchEvent(event)
-                    }}
-                    x1={`${fromNode.leftPercent}%`}
+                    x1={`${fromNode.type==='not'?fromNode.leftPercent+chipPercentWidth/2:fromNode.leftPercent}%`}
                     y1={`${fromNode.topPercent}%`}
-                    x2={`${toNode.leftPercent}%`}
+                    x2={`${toNode.type==="not"?toNode.leftPercent-chipPercentWidth/2:toNode.leftPercent}%`}
                     y2={`${toNode.topPercent}%`}
                     strokeLinecap={"round"}
                     strokeLinejoin={"round"}

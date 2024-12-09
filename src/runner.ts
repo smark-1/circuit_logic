@@ -6,7 +6,18 @@ export default function runner(nodes: {[key: string]: NodeType}, lastChange:Node
 
     const changedNodes:{[id:string]:{node:NodeType,duration:number}} = {};
 
-    if(lastChange.type === 'input'){
+    if(lastChange.type === 'not'){
+        for (const node in nodesCopy) {
+            if (nodesCopy[node].type === 'connection' && nodesCopy[node].from === lastChange.id) {
+                nodesCopy[node].value = !lastChange.value;
+                if(nodesCopy[node].onMainCanvas){
+                    changedNodes[node] = {node:nodesCopy[node],duration:1000};
+                }else{
+                    changedNodes[node] = {node:nodesCopy[node],duration:10};
+                }
+            }
+        }
+    }else if(lastChange.type === 'input'){
         for (const node in nodesCopy) {
             if (nodesCopy[node].type === 'connection' && nodesCopy[node].from === lastChange.id) {
                 nodesCopy[node].value = lastChange.value;

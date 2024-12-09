@@ -1,7 +1,7 @@
 export type NodeID = string;
 
 export type NodeBaseType = {
-    type: 'input' | 'output'|"connection" | "chip";
+    type: 'input' | 'output'|"connection" | "chip"|"not";
     id: NodeID;
     leftPercent: number;
     topPercent: number;
@@ -31,4 +31,8 @@ export interface ChipType extends NodeBaseType {
     name:string;
 }
 
-export type NodeType = InputType | OutputType | ConnectionType | ChipType;
+export interface NotType extends NodeBaseType {
+    type: 'not';
+}
+
+export type NodeType = InputType | OutputType | ConnectionType | ChipType | NotType;
