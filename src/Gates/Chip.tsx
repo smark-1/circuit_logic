@@ -4,13 +4,13 @@ import {useContext} from "react";
 import {nodeContext} from "../appContext.ts";
 
 
-export default function Chip(props:{chip:ChipType}){
+export default function Chip(props: { chip: ChipType }) {
     const nodesContext = useContext(nodeContext)
-    const IONodeIDs = [...props.chip.inputs,...props.chip.outputs]
+    const IONodeIDs = [...props.chip.inputs, ...props.chip.outputs]
 
-    const reactNodes = Object.values(nodesContext.nodes).filter((node)=>{
+    const reactNodes = Object.values(nodesContext.nodes).filter((node) => {
         return IONodeIDs.includes(node.id)
-    }).map((node)=>{
+    }).map((node) => {
         return <Node node={node}
                      key={node.id}
 

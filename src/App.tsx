@@ -66,10 +66,10 @@ function App() {
     }
 
     const reactNodes = Object.values(nodes).filter(node => node.onMainCanvas).map((node) => {
-        return <div key={node.id} draggable={["not","chip"].includes(node.type)}
+        return <div key={node.id} draggable={["not", "chip"].includes(node.type)}
                     onDragStart={(e) => {
-                e.dataTransfer.setData("nodeMove", node.id)
-        }}
+                        e.dataTransfer.setData("nodeMove", node.id)
+                    }}
         ><Node node={node}
                handleTriggerChange={(node) => {
                    setNodes((nodes: { [key: string]: NodeType }) => {
@@ -150,33 +150,33 @@ function App() {
 
                                  const chipID = event.dataTransfer.getData("newChip")
 
-                                    if (chipID === "not") {
-                                        newNode = {
-                                            ...newNode,
-                                            type: "not",
-                                        } as NotType
-                                        setNodes(nodes => ({...nodes, [id]: newNode}))
-                                    }else{
-                                        // // find and replace all ids in the chip with new random ids
-                                        let chip = chips[chipID]
-                                        let chipString = JSON.stringify(chip)
+                                 if (chipID === "not") {
+                                     newNode = {
+                                         ...newNode,
+                                         type: "not",
+                                     } as NotType
+                                     setNodes(nodes => ({...nodes, [id]: newNode}))
+                                 } else {
+                                     // // find and replace all ids in the chip with new random ids
+                                     let chip = chips[chipID]
+                                     let chipString = JSON.stringify(chip)
 
 
-                                        for (const nodeId of GetAllIds(chip.nodes)) {
-                                            chipString = chipString.replace(new RegExp(nodeId, "g"), Math.random().toString())
-                                        }
-                                        chip = JSON.parse(chipString)
-                                        newNode = {
-                                            ...newNode,
-                                            type: "chip",
-                                            inputs: chip.inputs,
-                                            outputs: chip.outputs,
-                                            nodes: chip.nodes,
-                                            name: chip.name
-                                        } as ChipType
+                                     for (const nodeId of GetAllIds(chip.nodes)) {
+                                         chipString = chipString.replace(new RegExp(nodeId, "g"), Math.random().toString())
+                                     }
+                                     chip = JSON.parse(chipString)
+                                     newNode = {
+                                         ...newNode,
+                                         type: "chip",
+                                         inputs: chip.inputs,
+                                         outputs: chip.outputs,
+                                         nodes: chip.nodes,
+                                         name: chip.name
+                                     } as ChipType
 
-                                        setNodes(nodes => ({...nodes, ...chip.nodes, [id]: newNode}))
-                                    }
+                                     setNodes(nodes => ({...nodes, ...chip.nodes, [id]: newNode}))
+                                 }
 
                              } else if (event.dataTransfer.getData("nodeMove") && !drag.start) {
                                  const id = event.dataTransfer.getData("nodeMove")
