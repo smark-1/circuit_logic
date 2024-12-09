@@ -16,10 +16,14 @@ export default function Not(props: { not: NotType }) {
                         drag.setDrag({start: null, end: null})
                         nodesContext.setNodes((nodes: { [key: string]: NodeType }) => {
                             const id = Math.random().toString()
+
+                            // if when setting state, the drag.start is null, then don't add the connection node
+                            if (!drag.drag.start) {
+                                return nodes
+                            }
                             const connectionNode: ConnectionType = {
                                 id: id,
                                 type: "connection",
-                                // @ts-ignore
                                 from: drag.drag.start,
                                 to: props.not.id,
                                 leftPercent: 0,

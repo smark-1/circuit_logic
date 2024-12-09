@@ -1,5 +1,5 @@
 import Node from "./Nodes/Node.tsx";
-import {useEffect, useState} from "react";
+import {DragEvent, MouseEvent, useEffect, useState} from "react";
 import {ChipType, InputType, NodeID, NodeType, NotType, OutputType} from "./types.ts";
 import {dragContext, nodeContext} from "./appContext.ts";
 import {GetAllIds} from "./utils.ts";
@@ -10,7 +10,7 @@ import defaultChips from './defaultChips.json';
 
 function App() {
     const [nodes, setNodes] = useState<{ [key: string]: NodeType }>({});
-    const [chips, setChips] = useState<{ [key: string]: ChipType }>(defaultChips as {[key:string]:ChipType});
+    const [chips, setChips] = useState<{ [key: string]: ChipType }>(defaultChips as { [key: string]: ChipType });
     const [drag, setDrag] = useState<{ start: null | NodeID, end: null | NodeID }>({start: null, end: null})
     const [initialDragPos, setInitialDragPos] = useState({x: 0, y: 0})
     const [mousePos, setMousePos] = useState({x: 0, y: 0, width: 0, height: 0})
@@ -26,11 +26,10 @@ function App() {
             setChangedNodes([])
         }
     }, [changedNodes]);
-    const addNode = (e: MouseEvent) => {
+    const addNode = (e: MouseEvent<HTMLElement>) => {
         if (e.target !== e.currentTarget) return;
 
-        // @ts-expect-error
-        const rect = e.target.getBoundingClientRect();
+        const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left; //x position within the element.
         const y = e.clientY - rect.top;  //y position within the element.
 
@@ -100,9 +99,8 @@ function App() {
         </div>
     </div>)
 
-    const handleMouseMove = (e: React.DragEvent<HTMLDivElement>) => {
+    const handleMouseMove = (e: DragEvent<HTMLDivElement>) => {
         if (!e.currentTarget) return;
-        // @ts-ignore
         const boundingRect = e.currentTarget.getBoundingClientRect()
         setMousePos({
             x: e.clientX - boundingRect.left,
@@ -118,9 +116,7 @@ function App() {
             <dragContext.Provider value={{drag, setDrag}}>
                 <div className={"w-full h-screen bg-slate-900 p-8 flex"}>
                     <div className={"w-[80vw] h-full bg-slate-800 relative"}
-                        /* @ts-ignore */
                          onClick={addNode}
-                        /* @ts-ignore */
                          onDragOver={(e) => {
                              handleMouseMove(e)
                              e.dataTransfer.dropEffect = "link";
@@ -134,8 +130,7 @@ function App() {
                              if (event.dataTransfer.getData("newChip")) {
                                  const id = Math.random().toString()
 
-                                 // @ts-ignore
-                                 const rect = event.target.getBoundingClientRect();
+                                 const rect = event.currentTarget.getBoundingClientRect();
                                  const x = event.clientX - rect.left; //x position within the element.
                                  const y = event.clientY - rect.top;  //y position within the element.
 
@@ -222,11 +217,14 @@ function App() {
                         for (const id in nodeCopy) {
                             nodeCopy[id].onMainCanvas = false
                         }
+
+                        // if no name, don't save
+                        if (!name) return;
+
                         const chip: ChipType = {
                             id: id,
                             type: "chip",
                             nodes: {...nodeCopy},
-                            // @ts-ignore
                             name: name,
                             inputs: Object.values(nodes).filter(node => node.type === "input" && node.onMainCanvas).map(node => node.id),
                             outputs: Object.values(nodes).filter(node => node.type === "output" && node.onMainCanvas).map(node => node.id),

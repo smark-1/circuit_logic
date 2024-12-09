@@ -9,7 +9,7 @@ export default function ConnectionNode(props: {
 }) {
     const rectRef = useRef<HTMLDivElement>()
     const nodesContext = useContext(nodeContext)
-    const lineRef = useRef()
+    const lineRef = useRef<SVGLineElement>()
     const [strokeTotalLength, setStrokeTotalLength] = useState(10000)
 
     const variants = {
@@ -28,8 +28,9 @@ export default function ConnectionNode(props: {
         }
 
         setTimeout(() => {
-                // @ts-ignore
-                setStrokeTotalLength(lineRef.current.getTotalLength())
+                if (lineRef.current) {
+                    setStrokeTotalLength(lineRef.current.getTotalLength())
+                }
             }
             , 50)
     }, [props.node])
@@ -40,15 +41,18 @@ export default function ConnectionNode(props: {
     const nodesList = getNodes({...nodesContext.nodes}, rectRef)
     const fromNode = nodesList[props.node.from]
     const toNode = nodesList[props.node.to]
-    // @ts-ignore
-    const chipPercentWidth = 128 / (rectRef.current?.offsetWidth) * 100
+    let chipPercentWidth = 0
+    if (rectRef.current) {
+        chipPercentWidth = 128 / (rectRef.current.offsetWidth) * 100
+    }
+
     return (
-        // @ts-ignore
+        // @ts-expect-error
         <div ref={rectRef} className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}>
 
             <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
                 <line
-                    /* @ts-ignore */
+                    // @ts-expect-error
                     ref={lineRef}
                     y1={`${fromNode.topPercent}%`}
                     x1={`${fromNode.type === 'not' ? fromNode.leftPercent + chipPercentWidth / 2 : fromNode.leftPercent}%`}
@@ -58,7 +62,6 @@ export default function ConnectionNode(props: {
                     strokeLinejoin={"round"}
                     style={{stroke: "pink", strokeWidth: 4}}/>
                 <motion.line
-                    // key={props.node.id}
                     variants={variants}
                     animate={props.node.value ? "on" : "off"}
                     transition={{duration: strokeTotalLength / 1000}}

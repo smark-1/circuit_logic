@@ -1,18 +1,20 @@
-import {ChipType, NodeBaseType, NodeID} from "./types.ts";
+import {ChipType, NodeID, NodeType} from "./types.ts";
 
 export function getNodes(nodes: {
-    [p: string]: NodeBaseType
+    [p: string]: NodeType
 }, rectRef: React.MutableRefObject<HTMLDivElement | undefined>) {
     let nodesList = {...nodes}
-    // @ts-ignore
-    let chipPercentWidth = 128 / (rectRef.current?.offsetWidth) * 100
-    // @ts-ignore
-    let chipPercentHeight = 128 / (rectRef.current?.offsetHeight) * 100
 
-    // @ts-ignore
+    let chipPercentWidth = 0
+    let chipPercentHeight = 0
+    if (rectRef.current) {
+        chipPercentWidth = 128 / (rectRef.current.offsetWidth) * 100
+        chipPercentHeight = 128 / (rectRef.current.offsetHeight) * 100
+    }
+
     Object.values(nodesList).filter(node => node.type === "chip").forEach((node: ChipType) => {
         Object.values(node.nodes).filter(node => ['input', 'output'].includes(node.type))
-            .forEach((IOnode: NodeBaseType) => {
+            .forEach((IOnode: NodeType) => {
                 nodesList[IOnode.id] = {
                     ...IOnode,
                     leftPercent: IOnode.type === "input" ? node.leftPercent - chipPercentWidth / 2 : node.leftPercent + chipPercentWidth / 2,
@@ -24,12 +26,11 @@ export function getNodes(nodes: {
 }
 
 
-export function GetAllIds(nodes: { [key: string]: NodeBaseType }): NodeID[] {
+export function GetAllIds(nodes: { [key: string]: NodeType }): NodeID[] {
     let ids: NodeID[] = []
     for (const id in nodes) {
         ids.push(id)
         if (nodes[id].type === "chip") {
-            // @ts-ignore
             ids.push(...GetAllIds(nodes[id].nodes))
         }
     }
