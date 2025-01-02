@@ -7,9 +7,9 @@ import {getNodes} from "../utils.ts";
 export default function ConnectionNode(props: {
     node: ConnectionType,
 }) {
-    const rectRef = useRef<HTMLDivElement>()
+    const rectRef = useRef<HTMLDivElement>(null)
     const nodesContext = useContext(nodeContext)
-    const lineRef = useRef<SVGLineElement>()
+    const lineRef = useRef<SVGLineElement>(null)
     const [strokeTotalLength, setStrokeTotalLength] = useState(10000)
 
     const variants = {
@@ -38,6 +38,7 @@ export default function ConnectionNode(props: {
     if (!props.node.onMainCanvas) {
         return null;
     }
+    // @ts-expect-error
     const nodesList = getNodes({...nodesContext.nodes}, rectRef)
     const fromNode = nodesList[props.node.from]
     const toNode = nodesList[props.node.to]
@@ -47,12 +48,10 @@ export default function ConnectionNode(props: {
     }
 
     return (
-        // @ts-expect-error
         <div ref={rectRef} className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}>
 
             <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
                 <line
-                    // @ts-expect-error
                     ref={lineRef}
                     y1={`${fromNode.topPercent}%`}
                     x1={`${fromNode.type === 'not' ? fromNode.leftPercent + chipPercentWidth / 2 : fromNode.leftPercent}%`}
