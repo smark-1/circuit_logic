@@ -32,7 +32,7 @@ function App() {
 
   useEffect(() => {
     if (changedNodes.length > 0) {
-      for (let node of changedNodes) {
+      for (const node of changedNodes) {
         setTimeout(() => {
           handleNodeChange(node.node);
         }, node.duration);
