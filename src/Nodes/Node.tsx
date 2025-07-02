@@ -41,13 +41,6 @@ export default function Node(props: {
     return (
       <div>
         {element}
-        {/* <button
-          type="button"
-          className="delete-button"
-          onClick={() => props.handleDelete(props.node.id)}
-        >
-          Delete
-        </button> */}
       </div>
     );
   }
