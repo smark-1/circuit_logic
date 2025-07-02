@@ -29,6 +29,7 @@ function App() {
   const [changedNodes, setChangedNodes] = useState<
     { node: NodeType; duration: number }[] | []
   >([]);
+  const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null);
 
   useEffect(() => {
     if (changedNodes.length > 0) {
@@ -40,29 +41,63 @@ function App() {
       setChangedNodes([]);
     }
   }, [changedNodes]);
+
+  // Update canvas rect when component mounts or window resizes
+  useEffect(() => {
+    const updateCanvasRect = () => {
+      const canvasDiv = document.querySelector('.bg-slate-800') as HTMLElement;
+      if (canvasDiv) {
+        setCanvasRect(canvasDiv.getBoundingClientRect());
+      }
+    };
+
+    updateCanvasRect();
+    window.addEventListener('resize', updateCanvasRect);
+    return () => window.removeEventListener('resize', updateCanvasRect);
+  }, []);
+
   const addNode = (e: MouseEvent<HTMLElement>) => {
     if (e.target !== e.currentTarget) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left; //x position within the element.
-    const y = e.clientY - rect.top; //y position within the element.
+    // Get the actual canvas div from the DOM
+    const canvasDiv = document.querySelector('.bg-slate-800') as HTMLElement;
+    if (!canvasDiv) return;
+
+    const overlayRect = e.currentTarget.getBoundingClientRect();
+    const canvasRect = canvasDiv.getBoundingClientRect();
+
+    // Calculate position relative to the overlay
+    const overlayX = e.clientX - overlayRect.left;
+    const overlayY = e.clientY - overlayRect.top;
+
+    // Define the extension area (reduce from 6% to 3% for more precision)
+    const extensionPercent = 3;
+    const extensionPixels = (canvasRect.width * extensionPercent) / 100;
+
+    // Calculate where the canvas starts and ends within the overlay
+    const canvasStartX = canvasRect.left - overlayRect.left;
+    const canvasEndX = canvasRect.right - overlayRect.left;
 
     const id = Math.random().toString();
 
     let newNode = {
       id: id,
-      leftPercent: (x / rect.width) * 100,
-      topPercent: (y / rect.height) * 100,
+      leftPercent: 0,
+      topPercent: (overlayY / overlayRect.height) * 100,
       onMainCanvas: true,
     } as NodeType;
-    if (newNode.leftPercent <= 6) {
+
+    // Check if click is in the left extension area or within left 6% of canvas
+    if (overlayX <= canvasStartX + extensionPixels) {
       newNode = {
         ...newNode,
         type: "input",
         leftPercent: 0,
         value: false,
       } as InputType;
-    } else if (newNode.leftPercent >= 94) {
+    }
+    // Check if click is in the right extension area or within right 6% of canvas
+    else if (overlayX >= canvasEndX - extensionPixels) {
       newNode = {
         ...newNode,
         type: "output",
@@ -92,7 +127,7 @@ function App() {
     .map((node) => {
       return (
         <div
-          key={node.id}
+            key={node.id}
           draggable={["not", "chip"].includes(node.type)}
           onDragStart={(e) => {
             e.dataTransfer.setData("nodeMove", node.id);
@@ -198,11 +233,10 @@ function App() {
             node={node}
             handleTriggerChange={(node) => {
               setNodes((nodes: { [key: string]: NodeType }) => {
-                const n2 = node;
-                n2.value = !n2.value;
+                const n2 = { ...node, value: !node.value };
                 return { ...nodes, [node.id]: n2 };
               });
-              setChangedNodes([...changedNodes, { node, duration: 10 }]);
+              setChangedNodes([...changedNodes, { node: { ...node, value: !node.value }, duration: 10 }]);
             }}
           />
         </div>
@@ -263,6 +297,7 @@ function App() {
     <nodeContext.Provider value={{ nodes, setNodes }}>
       <dragContext.Provider value={{ drag, setDrag }}>
         <div className={"w-full h-screen bg-slate-900 p-8 flex"}>
+          {/* Original canvas with normal layout and drag/drop functionality */}
           <div
             className={"w-[80vw] h-full bg-slate-800 relative"}
             onClick={addNode}
@@ -279,8 +314,8 @@ function App() {
                 const id = Math.random().toString();
 
                 const rect = event.currentTarget.getBoundingClientRect();
-                const x = event.clientX - rect.left; //x position within the element.
-                const y = event.clientY - rect.top; //y position within the element.
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
 
                 let newNode = {
                   id: id,
@@ -298,7 +333,7 @@ function App() {
                   } as NotType;
                   setNodes((nodes) => ({ ...nodes, [id]: newNode }));
                 } else {
-                  // // find and replace all ids in the chip with new random ids
+                  // find and replace all ids in the chip with new random ids
                   let chip = chips[chipID];
                   let chipString = JSON.stringify(chip);
 
@@ -366,6 +401,74 @@ function App() {
               </div>
             )}
           </div>
+
+          {/* Left extension area - positioned 20px to the left of canvas */}
+          {canvasRect && (
+            <div
+              className={"absolute"}
+              style={{
+                left: canvasRect.left-20, // 20px outside canvas, minus 20px width
+                top: canvasRect.top,
+                width: '20px', // Fixed 20px width
+                height: canvasRect.height,
+                pointerEvents: 'auto',
+              }}
+              onClick={(e) => {
+                // For left extension, always create input nodes
+                if (e.target !== e.currentTarget) return;
+
+                const id = Math.random().toString();
+                const rect = e.currentTarget.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+
+                const newNode = {
+                  id: id,
+                  type: "input",
+                  leftPercent: 0,
+                  topPercent: (y / rect.height) * 100,
+                  onMainCanvas: true,
+                  value: false,
+                } as InputType;
+
+                setNodes((nodes) => ({ ...nodes, [id]: newNode }));
+              }}
+            />
+          )}
+
+          {/* Right extension area - positioned 20px to the right of canvas */}
+          {canvasRect && (
+            <div
+              className={"absolute"}
+              style={{
+                left: canvasRect.right, // 20px outside right edge of canvas
+                top: canvasRect.top,
+                width: '20px', // Fixed 20px width
+                height: canvasRect.height,
+                pointerEvents: 'auto',
+                zIndex: 10,
+              }}
+              onClick={(e) => {
+                // For right extension, always create output nodes
+                if (e.target !== e.currentTarget) return;
+
+                const id = Math.random().toString();
+                const rect = e.currentTarget.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+
+                const newNode = {
+                  id: id,
+                  type: "output",
+                  leftPercent: 100,
+                  topPercent: (y / rect.height) * 100,
+                  onMainCanvas: true,
+                  value: false,
+                } as OutputType;
+
+                setNodes((nodes) => ({ ...nodes, [id]: newNode }));
+              }}
+            />
+          )}
+
           <div
             className={
               "h-full w-[20vw] bg-green-800 flex flex-col items-center p-2 space-y-4 overflow-auto"
@@ -427,7 +530,7 @@ function App() {
         </button>
       </dragContext.Provider>
     </nodeContext.Provider>
-  );
+    );
 }
 
 export default App;
