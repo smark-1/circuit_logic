@@ -54,7 +54,7 @@ export default function Node(props: {
       }}
     >
       {element}
-      {props.isChipIO && props.handleDelete ? null : (
+      {!props.isChipIO && props.handleDelete && (
         <button
           type="button"
           className="delete-button absolute"
