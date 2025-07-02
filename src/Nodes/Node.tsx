@@ -57,11 +57,12 @@ export default function Node(props: {
       {!props.isChipIO && props.handleDelete && (
         <button
           type="button"
-          className="delete-button absolute"
+          className={`opacity-0 hover:opacity-100 absolute -top-2 ${props.node.type === 'output' ? '-left-2' : '-right-2'} w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-500 shadow-md hover:shadow-lg z-10`}
           // @ts-ignore
           onClick={() => props.handleDelete(props.node.id)}
+          title="Delete node"
         >
-          Delete
+          ×
         </button>
       )}
     </div>
