@@ -9,7 +9,7 @@ export default function Node(props: {
   node: NodeType;
   isChipIO?: boolean;
   handleTriggerChange?: (node: NodeType) => void;
-  handleDelete: (nodeId: string) => void;
+  handleDelete?: (nodeId: string) => void;
 }) {
   let element = <p>el</p>;
   switch (props.node.type) {
@@ -61,10 +61,11 @@ export default function Node(props: {
       }}
     >
       {element}
-      {props.isChipIO ? null : (
+      {props.isChipIO && props.handleDelete ? null : (
         <button
           type="button"
           className="delete-button absolute"
+          // @ts-ignore
           onClick={() => props.handleDelete(props.node.id)}
         >
           Delete

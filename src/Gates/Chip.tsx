@@ -12,7 +12,7 @@ export default function Chip(props: { chip: ChipType }) {
       return IONodeIDs.includes(node.id);
     })
     .map((node) => {
-      return <Node node={node} key={node.id} isChipIO={true} />;
+      return <Node node={node} key={node.id} isChipIO={true}/>;
     });
 
   return (
