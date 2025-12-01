@@ -10,7 +10,7 @@
         "preview": "vite preview"
     },
     "dependencies": {
-        "motion": "12.23.24",
+        "motion": "12.23.25",
         "react": "19.1.1",
         "react-dom": "19.2.0"
     },
