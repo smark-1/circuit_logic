@@ -1,14 +1,15 @@
 import {ConnectionType} from "../types.ts";
 import {motion} from "motion/react"
 import {useContext, useEffect, useRef, useState} from "react";
-import {nodeContext} from "../appContext.ts";
+import {canvasContext, nodeContext} from "../appContext.ts";
+import {nodeAnchorX} from "../geometry.ts";
 import {getNodes} from "../utils.ts";
 
 export default function ConnectionNode(props: {
     node: ConnectionType,
 }) {
-    const rectRef = useRef<HTMLDivElement>(null)
     const nodesContext = useContext(nodeContext)
+    const {width, height} = useContext(canvasContext)
     const lineRef = useRef<SVGLineElement>(null)
     const [strokeTotalLength, setStrokeTotalLength] = useState(10000)
 
@@ -38,24 +39,25 @@ export default function ConnectionNode(props: {
     if (!props.node.onMainCanvas) {
         return null;
     }
-    // @ts-expect-error
-    const nodesList = getNodes({...nodesContext.nodes}, rectRef)
+    const nodesList = getNodes(nodesContext.nodes, width, height)
     const fromNode = nodesList[props.node.from]
     const toNode = nodesList[props.node.to]
-    let chipPercentWidth = 0
-    if (rectRef.current) {
-        chipPercentWidth = 128 / (rectRef.current.offsetWidth) * 100
+    if (!fromNode || !toNode) {
+        return null;
     }
 
+    const fromX = nodeAnchorX(fromNode, "from", width)
+    const toX = nodeAnchorX(toNode, "to", width)
+
     return (
-        <div ref={rectRef} className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}>
+        <div className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}>
 
             <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
                 <line
                     ref={lineRef}
                     y1={`${fromNode.topPercent}%`}
-                    x1={`${fromNode.type === 'not' ? fromNode.leftPercent + chipPercentWidth / 2 : fromNode.leftPercent}%`}
-                    x2={`${toNode.type === "not" ? toNode.leftPercent - chipPercentWidth / 2 : toNode.leftPercent}%`}
+                    x1={`${fromX}%`}
+                    x2={`${toX}%`}
                     y2={`${toNode.topPercent}%`}
                     strokeLinecap={"round"}
                     strokeLinejoin={"round"}
@@ -64,9 +66,9 @@ export default function ConnectionNode(props: {
                     variants={variants}
                     animate={props.node.value ? "on" : "off"}
                     transition={{duration: strokeTotalLength / 1000}}
-                    x1={`${fromNode.type === 'not' ? fromNode.leftPercent + chipPercentWidth / 2 : fromNode.leftPercent}%`}
+                    x1={`${fromX}%`}
                     y1={`${fromNode.topPercent}%`}
-                    x2={`${toNode.type === "not" ? toNode.leftPercent - chipPercentWidth / 2 : toNode.leftPercent}%`}
+                    x2={`${toX}%`}
                     y2={`${toNode.topPercent}%`}
                     strokeLinecap={"round"}
                     strokeLinejoin={"round"}

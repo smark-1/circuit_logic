@@ -1,4 +1,5 @@
-import {ChipType, NodeID, NodeType} from "./types.ts";
+import {ChipType, NodeID, NodeType, NodesMap} from "./types.ts";
+import {GATE_SIZE} from "./constants.ts";
 
 export function createId(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -7,23 +8,17 @@ export function createId(): string {
     return Math.random().toString();
 }
 
-export function getNodes(nodes: {
-    [p: string]: NodeType
-}, rectRef: React.MutableRefObject<HTMLDivElement | undefined>) {
-    let nodesList = {...nodes}
+export function getNodes(nodes: NodesMap, canvasWidth: number, canvasHeight: number): NodesMap {
+    const nodesList: NodesMap = {...nodes}
 
-    let chipPercentWidth = 0
-    let chipPercentHeight = 0
-    if (rectRef.current) {
-        chipPercentWidth = 128 / (rectRef.current.offsetWidth) * 100
-        chipPercentHeight = 128 / (rectRef.current.offsetHeight) * 100
-    }
+    const chipPercentWidth = canvasWidth > 0 ? GATE_SIZE / canvasWidth * 100 : 0
+    const chipPercentHeight = canvasHeight > 0 ? GATE_SIZE / canvasHeight * 100 : 0
 
     Object.values(nodesList).filter(node => node.type === "chip").forEach((node: ChipType) => {
         Object.values(node.nodes).filter(node => ['input', 'output'].includes(node.type))
             .forEach((IOnode: NodeType) => {
                 nodesList[IOnode.id] = {
-                    ...IOnode,
+                    ...(nodesList[IOnode.id] ?? IOnode),
                     leftPercent: IOnode.type === "input" ? node.leftPercent - chipPercentWidth / 2 : node.leftPercent + chipPercentWidth / 2,
                     topPercent: node.topPercent - chipPercentHeight / 2 + IOnode.topPercent * chipPercentHeight / 100
                 }

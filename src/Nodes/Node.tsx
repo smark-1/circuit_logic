@@ -44,13 +44,21 @@ export default function Node(props: {
       </div>
     );
   }
+  const transform = props.isChipIO
+    ? "translate(-50%,-50%)"
+    : props.node.type === "input"
+      ? "translate(0,-50%)"
+      : props.node.type === "output"
+        ? "translate(-100%,-50%)"
+        : "translate(-50%,-50%)";
+
   return (
     <div
       className={"absolute"}
       style={{
         left: `${props.node.leftPercent}%`,
         top: `${props.node.topPercent}%`,
-        transform: "translate(-50%,-50%)",
+        transform,
       }}
     >
       {element}

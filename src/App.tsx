@@ -1,100 +1,85 @@
 import Node from "./Nodes/Node.tsx";
-import { type DragEvent, type MouseEvent, useEffect, useState } from "react";
+import { type DragEvent, type MouseEvent, useLayoutEffect, useRef, useState } from "react";
 import type {
+  ChipMap,
   ChipType,
   InputType,
   NodeID,
+  NodesMap,
   NodeType,
   NotType,
   OutputType,
 } from "./types.ts";
-import { dragContext, nodeContext } from "./appContext.ts";
-import { GetAllIds } from "./utils.ts";
+import { canvasContext, dragContext, nodeContext } from "./appContext.ts";
+import { GetAllIds, createId } from "./utils.ts";
 import { deleteNode, propagate } from "./runner.ts";
 import Chip from "./Gates/Chip.tsx";
 import Not from "./Gates/Not.tsx";
 import defaultChips from "./defaultChips.json";
+import { EDGE_ZONE_PX, GATE_SIZE, PIN_HIT_SIZE } from "./constants.ts";
+import { clampPercentFromPx } from "./geometry.ts";
 
 function App() {
-  const [nodes, setNodes] = useState<{ [key: string]: NodeType }>({});
-  const [chips, setChips] = useState<{ [key: string]: ChipType }>(
-    defaultChips as { [key: string]: ChipType },
+  const [nodes, setNodes] = useState<NodesMap>({});
+  const [chips, setChips] = useState<ChipMap>(
+    defaultChips as ChipMap,
   );
   const [drag, setDrag] = useState<{
     start: null | NodeID;
     end: null | NodeID;
   }>({ start: null, end: null });
   const [initialDragPos, setInitialDragPos] = useState({ x: 0, y: 0 });
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
-  // Update canvas rect when component mounts or window resizes
-  useEffect(() => {
-    const updateCanvasRect = () => {
-      const canvasDiv = document.querySelector('.bg-slate-800') as HTMLElement;
-      if (canvasDiv) {
-        setCanvasRect(canvasDiv.getBoundingClientRect());
-      }
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const updateSize = () => {
+      const rect = canvas.getBoundingClientRect();
+      setCanvasSize({ width: rect.width, height: rect.height });
     };
 
-    updateCanvasRect();
-    window.addEventListener('resize', updateCanvasRect);
-    return () => window.removeEventListener('resize', updateCanvasRect);
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(canvas);
+    return () => observer.disconnect();
   }, []);
 
   const addNode = (e: MouseEvent<HTMLElement>) => {
     if (e.target !== e.currentTarget) return;
 
-    // Get the actual canvas div from the DOM
-    const canvasDiv = document.querySelector('.bg-slate-800') as HTMLElement;
-    if (!canvasDiv) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
 
-    const overlayRect = e.currentTarget.getBoundingClientRect();
-    const canvasRect = canvasDiv.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
-    // Calculate position relative to the overlay
-    const overlayX = e.clientX - overlayRect.left;
-    const overlayY = e.clientY - overlayRect.top;
-
-    // Define the extension area (reduce from 6% to 3% for more precision)
-    const extensionPercent = 3;
-    const extensionPixels = (canvasRect.width * extensionPercent) / 100;
-
-    // Calculate where the canvas starts and ends within the overlay
-    const canvasStartX = canvasRect.left - overlayRect.left;
-    const canvasEndX = canvasRect.right - overlayRect.left;
-
-    const id = Math.random().toString();
-
-    let newNode = {
-      id: id,
-      leftPercent: 0,
-      topPercent: (overlayY / overlayRect.height) * 100,
-      onMainCanvas: true,
-    } as NodeType;
-
-    // Check if click is in the left extension area or within left 6% of canvas
-    if (overlayX <= canvasStartX + extensionPixels) {
-      newNode = {
-        ...newNode,
-        type: "input",
-        leftPercent: 0,
-        value: false,
-      } as InputType;
-    }
-    // Check if click is in the right extension area or within right 6% of canvas
-    else if (overlayX >= canvasEndX - extensionPixels) {
-      newNode = {
-        ...newNode,
-        type: "output",
-        leftPercent: 100,
-        value: false,
-      } as OutputType;
+    let type: "input" | "output";
+    let leftPercent: number;
+    if (x <= EDGE_ZONE_PX) {
+      type = "input";
+      leftPercent = 0;
+    } else if (x >= rect.width - EDGE_ZONE_PX) {
+      type = "output";
+      leftPercent = 100;
     } else {
       return;
     }
 
-    setNodes((nodes) => ({ ...nodes, [id]: newNode }));
+    const id = createId();
+    const newNode = {
+      id,
+      type,
+      leftPercent,
+      topPercent: clampPercentFromPx(y, PIN_HIT_SIZE, rect.height),
+      onMainCanvas: true,
+      value: false,
+    } as InputType | OutputType;
+
+    setNodes((nodesState) => ({ ...nodesState, [id]: newNode }));
   };
 
   const reactNodes = Object.values(nodes)
@@ -177,254 +162,198 @@ function App() {
   );
 
   const handleMouseMove = (e: DragEvent<HTMLDivElement>) => {
-    if (!e.currentTarget) return;
-    const boundingRect = e.currentTarget.getBoundingClientRect();
+    const rect = e.currentTarget.getBoundingClientRect();
     setMousePos({
-      x: e.clientX - boundingRect.left,
-      y: e.clientY - boundingRect.top,
-      width: boundingRect.width,
-      height: boundingRect.height,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
     });
   };
 
+  const saveChip = () => {
+    const name = prompt("Chip name");
+    if (!name) return;
+
+    const nodeCopy: NodesMap = {};
+    for (const [nodeId, node] of Object.entries(nodes)) {
+      nodeCopy[nodeId] = { ...node, onMainCanvas: false } as NodeType;
+    }
+
+    const id = createId();
+    const chip: ChipType = {
+      id,
+      type: "chip",
+      nodes: nodeCopy,
+      name,
+      inputs: Object.values(nodes)
+        .filter((node) => node.type === "input" && node.onMainCanvas)
+        .map((node) => node.id),
+      outputs: Object.values(nodes)
+        .filter((node) => node.type === "output" && node.onMainCanvas)
+        .map((node) => node.id),
+      onMainCanvas: false,
+      leftPercent: 0,
+      topPercent: 0,
+      value: false,
+    };
+
+    setChips((currentChips) => ({ ...currentChips, [id]: chip }));
+    setNodes({});
+    setDrag({ start: null, end: null });
+  };
+
+  const nodeContextValue = { nodes, setNodes };
+  const canvasContextValue = { width: canvasSize.width, height: canvasSize.height };
+
   return (
-    <nodeContext.Provider value={{ nodes, setNodes }}>
-      <dragContext.Provider value={{ drag, setDrag }}>
-        <div className={"w-full h-screen bg-slate-900 p-8 flex"}>
-          {/* Original canvas with normal layout and drag/drop functionality */}
-          <div
-            className={"w-[80vw] h-full bg-slate-800 relative"}
-            onClick={addNode}
-            onDragOver={(e) => {
-              handleMouseMove(e);
-              e.dataTransfer.dropEffect = "link";
-              e.preventDefault();
-            }}
-            onDragStart={(e) => {
-              setInitialDragPos({ x: e.pageX - 32, y: e.pageY - 32 });
-            }}
-            onDrop={(event) => {
-              if (event.dataTransfer.getData("newChip")) {
-                const id = Math.random().toString();
-
-                const rect = event.currentTarget.getBoundingClientRect();
-                const x = event.clientX - rect.left;
-                const y = event.clientY - rect.top;
-
-                let newNode = {
-                  id: id,
-                  leftPercent: (x / rect.width) * 100,
-                  topPercent: (y / rect.height) * 100,
-                  onMainCanvas: true,
-                } as NodeType;
-
-                const chipID = event.dataTransfer.getData("newChip");
-
-                if (chipID === "not") {
-                  newNode = {
-                    ...newNode,
-                    type: "not",
-                  } as NotType;
-                  setNodes((nodes) => ({ ...nodes, [id]: newNode }));
-                } else {
-                  // find and replace all ids in the chip with new random ids
-                  let chip = chips[chipID];
-                  let chipString = JSON.stringify(chip);
-
-                  for (const nodeId of GetAllIds(chip.nodes)) {
-                    chipString = chipString.replace(
-                      new RegExp(nodeId, "g"),
-                      Math.random().toString(),
-                    );
-                  }
-                  chip = JSON.parse(chipString);
-                  newNode = {
-                    ...newNode,
-                    type: "chip",
-                    inputs: chip.inputs,
-                    outputs: chip.outputs,
-                    nodes: chip.nodes,
-                    name: chip.name,
-                  } as ChipType;
-
-                  setNodes((nodes) => ({
-                    ...nodes,
-                    ...chip.nodes,
-                    [id]: newNode,
-                  }));
-                }
-              } else if (
-                event.dataTransfer.getData("nodeMove") &&
-                !drag.start
-              ) {
-                const id = event.dataTransfer.getData("nodeMove");
-                setNodes((nodes: { [key: string]: NodeType }) => {
-                  const n2 = nodes[id];
-                  n2.leftPercent = (mousePos.x / mousePos.width) * 100;
-                  n2.topPercent = (mousePos.y / mousePos.height) * 100;
-                  return { ...nodes, [id]: n2 };
-                });
-              } else {
-                setDrag({ start: null, end: null });
-              }
-            }}
-          >
-            {reactNodes}
-
-            {drag.start && (
-              <div
-                className={
-                  "absolute left-0 right-0 top-0 bottom-0 pointer-events-none"
-                }
-              >
-                <svg
-                  height="100%"
-                  width="100%"
-                  xmlns="http://www.w3.org/2000/svg"
+    <nodeContext.Provider value={nodeContextValue}>
+      <canvasContext.Provider value={canvasContextValue}>
+        <dragContext.Provider value={{ drag, setDrag }}>
+          <div className={"flex h-dvh w-full flex-col overflow-hidden bg-slate-900"}>
+            <div className={"flex items-center justify-between gap-2 px-2 pt-2 md:px-8 md:pt-4"}>
+              <p className={"text-xs uppercase tracking-wide text-slate-400 md:text-sm"}>
+                Circuit Logic
+              </p>
+              <div className={"flex gap-2"}>
+                <button
+                  type="button"
+                  className={"rounded-md bg-blue-500 p-2 text-xs text-white uppercase md:text-sm"}
+                  onClick={saveChip}
                 >
-                  <line
-                    x1={`${initialDragPos.x}`}
-                    y1={`${initialDragPos.y}`}
-                    x2={`${mousePos.x}`}
-                    y2={`${mousePos.y}`}
-                    strokeLinecap={"round"}
-                    strokeLinejoin={"round"}
-                    style={{ stroke: "pink", strokeWidth: 4 }}
-                  />
-                </svg>
+                  Save chip
+                </button>
+                <button
+                  type="button"
+                  className={"rounded-md bg-red-700 p-2 text-xs text-white uppercase md:text-sm"}
+                  onClick={() => {
+                    setNodes({});
+                    setDrag({ start: null, end: null });
+                  }}
+                >
+                  Clear
+                </button>
               </div>
-            )}
+            </div>
+
+            <div className={"flex min-h-0 flex-1 flex-col gap-2 p-2 md:flex-row md:p-8 md:pt-2"}>
+              <div
+                ref={canvasRef}
+                className={"relative min-h-0 flex-1 touch-none overflow-hidden bg-slate-800 select-none"}
+                onClick={addNode}
+                onDragOver={(e) => {
+                  handleMouseMove(e);
+                  e.dataTransfer.dropEffect = "link";
+                  e.preventDefault();
+                }}
+                onDragStart={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setInitialDragPos({
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top,
+                  });
+                }}
+                onDrop={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const x = event.clientX - rect.left;
+                  const y = event.clientY - rect.top;
+                  const leftPercent = clampPercentFromPx(x, GATE_SIZE, rect.width);
+                  const topPercent = clampPercentFromPx(y, GATE_SIZE, rect.height);
+                  const chipID = event.dataTransfer.getData("newChip");
+
+                  if (chipID) {
+                    const id = createId();
+
+                    if (chipID === "not") {
+                      const newNode: NotType = {
+                        id,
+                        type: "not",
+                        leftPercent,
+                        topPercent,
+                        onMainCanvas: true,
+                        value: false,
+                      };
+                      setNodes((nodesState) => ({ ...nodesState, [id]: newNode }));
+                    } else {
+                      const template = chips[chipID];
+                      if (!template) return;
+
+                      let chip = template;
+                      let chipString = JSON.stringify(chip);
+
+                      for (const nodeId of GetAllIds(chip.nodes)) {
+                        chipString = chipString.replace(
+                          new RegExp(nodeId, "g"),
+                          createId(),
+                        );
+                      }
+                      chip = JSON.parse(chipString);
+
+                      const newNode: ChipType = {
+                        id,
+                        type: "chip",
+                        leftPercent,
+                        topPercent,
+                        onMainCanvas: true,
+                        inputs: chip.inputs,
+                        outputs: chip.outputs,
+                        nodes: chip.nodes,
+                        name: chip.name,
+                        value: false,
+                      };
+
+                      setNodes((nodesState) => ({
+                        ...nodesState,
+                        ...chip.nodes,
+                        [id]: newNode,
+                      }));
+                    }
+                  } else if (event.dataTransfer.getData("nodeMove") && !drag.start) {
+                    const id = event.dataTransfer.getData("nodeMove");
+                    setNodes((nodesState) => {
+                      const current = nodesState[id];
+                      if (!current) return nodesState;
+                      return {
+                        ...nodesState,
+                        [id]: { ...current, leftPercent, topPercent },
+                      };
+                    });
+                  } else {
+                    setDrag({ start: null, end: null });
+                  }
+                }}
+              >
+                <div className={"pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-slate-700/70 to-transparent"} />
+                <div className={"pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-700/70 to-transparent"} />
+
+                {reactNodes}
+
+                {drag.start && (
+                  <div className={"pointer-events-none absolute inset-0"}>
+                    <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
+                      <line
+                        x1={initialDragPos.x}
+                        y1={initialDragPos.y}
+                        x2={mousePos.x}
+                        y2={mousePos.y}
+                        strokeLinecap={"round"}
+                        strokeLinejoin={"round"}
+                        style={{ stroke: "pink", strokeWidth: 4 }}
+                      />
+                    </svg>
+                  </div>
+                )}
+              </div>
+
+              <div
+                className={"flex h-36 w-full shrink-0 gap-2 overflow-x-auto rounded-md bg-green-800 p-2 md:h-auto md:w-[20vw] md:flex-col md:items-center md:overflow-x-hidden md:overflow-y-auto md:space-y-4"}
+              >
+                {reactChips}
+              </div>
+            </div>
           </div>
-
-          {/* Left extension area - positioned 20px to the left of canvas */}
-          {canvasRect && (
-            <div
-              className={"absolute"}
-              style={{
-                left: canvasRect.left-20, // 20px outside canvas, minus 20px width
-                top: canvasRect.top,
-                width: '20px', // Fixed 20px width
-                height: canvasRect.height,
-                pointerEvents: 'auto',
-              }}
-              onClick={(e) => {
-                // For left extension, always create input nodes
-                if (e.target !== e.currentTarget) return;
-
-                const id = Math.random().toString();
-                const rect = e.currentTarget.getBoundingClientRect();
-                const y = e.clientY - rect.top;
-
-                const newNode = {
-                  id: id,
-                  type: "input",
-                  leftPercent: 0,
-                  topPercent: (y / rect.height) * 100,
-                  onMainCanvas: true,
-                  value: false,
-                } as InputType;
-
-                setNodes((nodes) => ({ ...nodes, [id]: newNode }));
-              }}
-            />
-          )}
-
-          {/* Right extension area - positioned 20px to the right of canvas */}
-          {canvasRect && (
-            <div
-              className={"absolute"}
-              style={{
-                left: canvasRect.right, // 20px outside right edge of canvas
-                top: canvasRect.top,
-                width: '20px', // Fixed 20px width
-                height: canvasRect.height,
-                pointerEvents: 'auto',
-                zIndex: 10,
-              }}
-              onClick={(e) => {
-                // For right extension, always create output nodes
-                if (e.target !== e.currentTarget) return;
-
-                const id = Math.random().toString();
-                const rect = e.currentTarget.getBoundingClientRect();
-                const y = e.clientY - rect.top;
-
-                const newNode = {
-                  id: id,
-                  type: "output",
-                  leftPercent: 100,
-                  topPercent: (y / rect.height) * 100,
-                  onMainCanvas: true,
-                  value: false,
-                } as OutputType;
-
-                setNodes((nodes) => ({ ...nodes, [id]: newNode }));
-              }}
-            />
-          )}
-
-          <div
-            className={
-              "h-full w-[20vw] bg-green-800 flex flex-col items-center p-2 space-y-4 overflow-auto"
-            }
-          >
-            {reactChips}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          className={
-            "absolute bottom-4 left-4 p-2 bg-blue-500 text-white rounded-md uppercase"
-          }
-          onClick={() => {
-            const name = prompt("Chip name");
-            const id = Math.random().toString();
-            // set all nodes to not be on main canvas
-            const nodeCopy = JSON.parse(JSON.stringify(nodes));
-            for (const id in nodeCopy) {
-              nodeCopy[id].onMainCanvas = false;
-            }
-
-            // if no name, don't save
-            if (!name) return;
-
-            const chip: ChipType = {
-              id: id,
-              type: "chip",
-              nodes: { ...nodeCopy },
-              name: name,
-              inputs: Object.values(nodes)
-                .filter((node) => node.type === "input" && node.onMainCanvas)
-                .map((node) => node.id),
-              outputs: Object.values(nodes)
-                .filter((node) => node.type === "output" && node.onMainCanvas)
-                .map((node) => node.id),
-              onMainCanvas: false,
-              leftPercent: 0,
-              topPercent: 0,
-              value: false,
-            };
-            setChips({ ...chips, [id]: chip });
-            setNodes({});
-          }}
-        >
-          Save chip
-        </button>
-        <button
-          type="button"
-          className={
-            "absolute bottom-4 left-32 p-2 bg-red-700 text-white rounded-md uppercase"
-          }
-          onClick={() => {
-            setNodes({});
-          }}
-        >
-          Clear
-        </button>
-      </dragContext.Provider>
+        </dragContext.Provider>
+      </canvasContext.Provider>
     </nodeContext.Provider>
-    );
+  );
 }
 
 export default App;
