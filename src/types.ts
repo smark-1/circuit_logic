@@ -36,3 +36,7 @@ export interface NotType extends NodeBaseType {
 }
 
 export type NodeType = InputType | OutputType | ConnectionType | ChipType | NotType;
+
+export type NodesMap = { [key: string]: NodeType };
+
+export type ChipMap = { [key: string]: ChipType };

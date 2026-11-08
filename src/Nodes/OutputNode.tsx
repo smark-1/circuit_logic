@@ -1,6 +1,7 @@
 import {useContext} from "react";
-import {ConnectionType, NodeType, OutputType} from "../types.ts";
+import {NodeType, OutputType} from "../types.ts";
 import {dragContext, nodeContext} from "../appContext.ts";
+import {createConnection} from "../runner.ts";
 
 export default function OutputNode(props: {
     node: OutputType,
@@ -24,26 +25,11 @@ export default function OutputNode(props: {
             onDrop={(e) => {
                 e.preventDefault();
                 if (drag.drag.start !== null) {
+                    const from = drag.drag.start
                     drag.setDrag({start: null, end: null})
-                    nodesContext.setNodes((nodes: { [key: string]: NodeType }) => {
-                        const id = Math.random().toString()
-
-                        // if when setting state, the drag.start is null, then don't add the connection node
-                        if (!drag.drag.start) {
-                            return nodes
-                        }
-                        const connectionNode: ConnectionType = {
-                            id: id,
-                            type: "connection",
-                            from: drag.drag.start,
-                            to: props.node.id,
-                            leftPercent: 0,
-                            topPercent: 0,
-                            value: false,
-                            onMainCanvas: true
-                        }
-                        return {...nodes, [id]: connectionNode}
-                    })
+                    nodesContext.setNodes((nodes: { [key: string]: NodeType }) =>
+                        createConnection(nodes, from, props.node.id)
+                    )
                 }
             }}
             onDragOver={(e) => {

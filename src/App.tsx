@@ -10,7 +10,7 @@ import type {
 } from "./types.ts";
 import { dragContext, nodeContext } from "./appContext.ts";
 import { GetAllIds } from "./utils.ts";
-import runner from "./runner.ts";
+import { deleteNode, propagate } from "./runner.ts";
 import Chip from "./Gates/Chip.tsx";
 import Not from "./Gates/Not.tsx";
 import defaultChips from "./defaultChips.json";
@@ -26,21 +26,7 @@ function App() {
   }>({ start: null, end: null });
   const [initialDragPos, setInitialDragPos] = useState({ x: 0, y: 0 });
   const [mousePos, setMousePos] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  const [changedNodes, setChangedNodes] = useState<
-    { node: NodeType; duration: number }[] | []
-  >([]);
   const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null);
-
-  useEffect(() => {
-    if (changedNodes.length > 0) {
-      for (const node of changedNodes) {
-        setTimeout(() => {
-          handleNodeChange(node.node);
-        }, node.duration);
-      }
-      setChangedNodes([]);
-    }
-  }, [changedNodes]);
 
   // Update canvas rect when component mounts or window resizes
   useEffect(() => {
@@ -111,23 +97,12 @@ function App() {
     setNodes((nodes) => ({ ...nodes, [id]: newNode }));
   };
 
-  const handleNodeChange = (node: NodeType) => {
-    setNodes((nodesState) => {
-      const runValues = runner(nodesState, node);
-      for (const id in runValues.changed) {
-        const n2 = runValues.changed[id];
-        setChangedNodes((changes) => [...changes, n2]);
-      }
-      return runValues.nodes;
-    });
-  };
-
   const reactNodes = Object.values(nodes)
     .filter((node) => node.onMainCanvas)
     .map((node) => {
       return (
         <div
-            key={node.id}
+          key={node.id}
           draggable={["not", "chip"].includes(node.type)}
           onDragStart={(e) => {
             e.dataTransfer.setData("nodeMove", node.id);
@@ -135,94 +110,7 @@ function App() {
         >
           <Node
             handleDelete={() => {
-              setNodes((nodes) => {
-                const nodeIdToDelete = node.id;
-                const newNodes = { ...nodes };
-                const nodeToDelete = newNodes[nodeIdToDelete];
-
-                if (!nodeToDelete) {
-                  // Nothing to delete
-                  return newNodes;
-                }
-
-                // Handle chips specially
-                if (nodeToDelete.type === "chip") {
-                  // Gather all IDs that live inside this chip
-                  let internalIds = Object.keys(nodeToDelete.nodes || {});
-
-                  // Add inputs and outputs to the internal IDs list
-                  if (nodeToDelete.inputs)
-                    internalIds = internalIds.concat(nodeToDelete.inputs);
-                  if (nodeToDelete.outputs)
-                    internalIds = internalIds.concat(nodeToDelete.outputs);
-
-                  console.log("inputs", nodeToDelete.inputs);
-                  console.log("outputs", nodeToDelete.outputs);
-                  console.log("internal ids", internalIds);
-
-                  // Delete all internal nodes
-                  for (const id of internalIds) {
-                    delete newNodes[id];
-                  }
-
-                  // Find and delete all connection nodes that reference any input/output of this chip
-                  const connectionsToDelete = [];
-
-                  for (const nodeId in newNodes) {
-                    const currentNode = newNodes[nodeId];
-
-                    if (currentNode.type === "connection") {
-                      console.log("checking connection", currentNode);
-
-                      // Check if connection's 'from' or 'to' is in the chip's inputs or outputs arrays
-                      const fromIsChipIO =
-                        nodeToDelete.inputs?.includes(currentNode.from) ||
-                        nodeToDelete.outputs?.includes(currentNode.from);
-
-                      const toIsChipIO =
-                        nodeToDelete.inputs?.includes(currentNode.to) ||
-                        nodeToDelete.outputs?.includes(currentNode.to);
-
-                      if (fromIsChipIO || toIsChipIO) {
-                        connectionsToDelete.push(nodeId);
-                        console.log("adding connection to delete:", nodeId);
-                      }
-                    }
-                  }
-
-                  // Delete all identified connection nodes
-                  for (const id of connectionsToDelete) {
-                    delete newNodes[id];
-                  }
-                } else {
-                  // For non-chip nodes, delete any connection that references this node
-                  const connectionsToDelete = [];
-
-                  for (const nodeId in newNodes) {
-                    const currentNode = newNodes[nodeId];
-
-                    if (currentNode.type === "connection") {
-                      if (
-                        currentNode.from === nodeIdToDelete ||
-                        currentNode.to === nodeIdToDelete
-                      ) {
-                        connectionsToDelete.push(nodeId);
-                      }
-                    }
-                  }
-
-                  // Delete all identified connection nodes
-                  for (const id of connectionsToDelete) {
-                    delete newNodes[id];
-                  }
-                }
-
-                // Finally delete the node itself
-                delete newNodes[nodeIdToDelete];
-                console.log("new nodes", newNodes);
-                return newNodes;
-              });
-              // Reset drag state if it references the deleted node
+              setNodes((nodesState) => deleteNode(nodesState, node.id));
               setDrag((dragState) => {
                 if (dragState.start === node.id || dragState.end === node.id) {
                   return { start: null, end: null };
@@ -231,12 +119,18 @@ function App() {
               });
             }}
             node={node}
-            handleTriggerChange={(node) => {
-              setNodes((nodes: { [key: string]: NodeType }) => {
-                const n2 = { ...node, value: !node.value };
-                return { ...nodes, [node.id]: n2 };
+            handleTriggerChange={(changedNode) => {
+              setNodes((nodesState) => {
+                const currentNode = nodesState[changedNode.id];
+                if (!currentNode || currentNode.type !== "input") {
+                  return nodesState;
+                }
+                const nextNodes = {
+                  ...nodesState,
+                  [currentNode.id]: { ...currentNode, value: !currentNode.value },
+                };
+                return propagate(nextNodes, [currentNode.id]);
               });
-              setChangedNodes([...changedNodes, { node: { ...node, value: !node.value }, duration: 10 }]);
             }}
           />
         </div>
