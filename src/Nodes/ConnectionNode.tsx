@@ -2,18 +2,17 @@ import {ConnectionType} from "../types.ts";
 import {motion} from "motion/react"
 import {useContext} from "react";
 import {canvasContext, nodeContext} from "../appContext.ts";
-import {CONNECTION_ANIMATION_SECONDS} from "../constants.ts";
-import {nodeAnchorX} from "../geometry.ts";
+import {connectionDurationMs, nodeAnchorX} from "../geometry.ts";
 import {getNodes} from "../utils.ts";
 import type {TargetAndTransition} from "motion/react";
 
 const variants: Record<"on" | "off", TargetAndTransition> = {
     on: {
-        strokeDashoffset: [1, 0],
+        strokeDashoffset: 0,
         opacity: 1,
     },
     off: {
-        strokeDashoffset: [0, -1],
+        strokeDashoffset: 1,
     },
 }
 
@@ -35,6 +34,9 @@ export default function ConnectionNode(props: {
 
     const fromX = nodeAnchorX(fromNode, "from", width)
     const toX = nodeAnchorX(toNode, "to", width)
+    const duration = connectionDurationMs(fromNode, toNode, width, height) / 1000
+    const midX = (fromX + toX) / 2
+    const midY = (fromNode.topPercent + toNode.topPercent) / 2
 
     return (
         <div
@@ -53,7 +55,7 @@ export default function ConnectionNode(props: {
                 <motion.line
                     variants={variants}
                     animate={props.node.value ? "on" : "off"}
-                    transition={{duration: CONNECTION_ANIMATION_SECONDS}}
+                    transition={{duration}}
                     pathLength={1}
                     x1={`${fromX}%`}
                     y1={`${fromNode.topPercent}%`}
@@ -66,6 +68,16 @@ export default function ConnectionNode(props: {
                     strokeDashoffset={1}
                     style={{stroke: "red", strokeWidth: 4}}/>
             </svg>
+            <div
+                data-delete-connection={props.node.id}
+                className={"group pointer-events-auto absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center"}
+                style={{left: `${midX}%`, top: `${midY}%`}}
+                title={"Delete connection"}
+            >
+                <div className={"pointer-events-none flex h-6 w-6 items-center justify-center rounded-full bg-red-500/80 text-xs font-bold text-white opacity-70 shadow transition group-hover:opacity-100"}>
+                    ×
+                </div>
+            </div>
         </div>
     )
 }

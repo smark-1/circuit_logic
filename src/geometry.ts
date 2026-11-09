@@ -1,4 +1,4 @@
-import { GATE_SIZE, PIN_HIT_SIZE } from "./constants.ts";
+import { GATE_SIZE, MAX_CONNECTION_DELAY_MS, MIN_CONNECTION_DELAY_MS, PIN_HIT_SIZE } from "./constants.ts";
 import type { NodeType } from "./types.ts";
 
 export function clamp(value: number, min: number, max: number): number {
@@ -46,4 +46,28 @@ export function nodeAnchorX(node: NodeType, side: "from" | "to", canvasWidth: nu
         return node.leftPercent + (side === "from" ? gateOffset : -gateOffset);
     }
     return node.leftPercent;
+}
+
+/**
+ * How long a signal takes to travel between two laid-out nodes, in
+ * milliseconds. The connection animation uses exactly this duration, so the
+ * visual pulse reaches the destination when the destination value changes.
+ */
+export function connectionDurationMs(
+    fromNode: NodeType,
+    toNode: NodeType,
+    canvasWidth: number,
+    canvasHeight: number,
+): number {
+    if (canvasWidth <= 0 || canvasHeight <= 0) {
+        return MIN_CONNECTION_DELAY_MS;
+    }
+
+    const fromX = (nodeAnchorX(fromNode, "from", canvasWidth) / 100) * canvasWidth;
+    const toX = (nodeAnchorX(toNode, "to", canvasWidth) / 100) * canvasWidth;
+    const fromY = (fromNode.topPercent / 100) * canvasHeight;
+    const toY = (toNode.topPercent / 100) * canvasHeight;
+    const length = Math.hypot(toX - fromX, toY - fromY);
+
+    return clamp(length, MIN_CONNECTION_DELAY_MS, MAX_CONNECTION_DELAY_MS);
 }

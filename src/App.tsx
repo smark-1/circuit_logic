@@ -17,7 +17,8 @@ import type {
 } from "./types.ts";
 import { canvasContext, nodeContext } from "./appContext.ts";
 import { createId, remapChip } from "./utils.ts";
-import { createConnection, deleteNode, propagate, settle } from "./runner.ts";
+import { createConnection, deleteNode, settle } from "./runner.ts";
+import { createSimulation, type Simulation } from "./simulation.ts";
 import Chip from "./Gates/Chip.tsx";
 import Not from "./Gates/Not.tsx";
 import defaultChips from "./defaultChips.json";
@@ -30,6 +31,7 @@ import {
 import { clamp, clampPercentFromPx } from "./geometry.ts";
 
 type Point = { x: number; y: number };
+type PinRole = "source" | "sink";
 
 type SessionBase = {
   pointerId: number;
@@ -39,7 +41,12 @@ type SessionBase = {
 };
 
 type DragSession =
-  | (SessionBase & { kind: "connect"; from: NodeID; fromPoint: Point })
+  | (SessionBase & {
+      kind: "connect";
+      from: NodeID;
+      fromRole: PinRole;
+      fromPoint: Point;
+    })
   | (SessionBase & { kind: "move"; id: NodeID; offset: Point })
   | (SessionBase & { kind: "canvas" })
   | (SessionBase & { kind: "palette"; chipId: string });
@@ -48,12 +55,26 @@ function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function findSinkAt(clientX: number, clientY: number): NodeID | null {
+function findPinAt(
+  clientX: number,
+  clientY: number,
+): { id: NodeID; role: PinRole } | null {
   const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
-  const pin = element?.closest<HTMLElement>('[data-pin-role="sink"]');
-  if (pin?.dataset.nodeId) {
-    return pin.dataset.nodeId;
+  const pin = element?.closest<HTMLElement>("[data-pin-role]");
+  const id = pin?.dataset.nodeId;
+  const role = pin?.dataset.pinRole;
+  if (!id || (role !== "source" && role !== "sink")) {
+    return null;
   }
+  return { id, role };
+}
+
+function findSinkAt(clientX: number, clientY: number): NodeID | null {
+  const pin = findPinAt(clientX, clientY);
+  if (pin) {
+    return pin.role === "sink" ? pin.id : null;
+  }
+  const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
   const sink = element?.closest<HTMLElement>("[data-sink-id]");
   return sink?.dataset.sinkId ?? null;
 }
@@ -68,8 +89,28 @@ function App() {
 
   const nodesRef = useRef(nodes);
   const chipsRef = useRef(chips);
+  const canvasSizeRef = useRef(canvasSize);
   const sessionRef = useRef<DragSession | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const simulationRef = useRef<Simulation | null>(null);
+
+  if (simulationRef.current === null) {
+    simulationRef.current = createSimulation({
+      getNodes: () => nodesRef.current,
+      applyNodes: (next) => {
+        nodesRef.current = next;
+        setNodes(next);
+      },
+      getCanvasSize: () => canvasSizeRef.current,
+    });
+  }
+  const simulation = simulationRef.current!;
+
+  /** Keep the simulated nodes and React state in lockstep. */
+  const applyNodes = (next: NodesMap) => {
+    nodesRef.current = next;
+    setNodes(next);
+  };
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -87,7 +128,9 @@ function App() {
 
     const updateSize = () => {
       const rect = canvas.getBoundingClientRect();
-      setCanvasSize({ width: rect.width, height: rect.height });
+      const size = { width: rect.width, height: rect.height };
+      canvasSizeRef.current = size;
+      setCanvasSize(size);
     };
 
     updateSize();
@@ -95,6 +138,8 @@ function App() {
     observer.observe(canvas);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => () => simulation.clear(), [simulation]);
 
   const getCanvasRect = () => canvasRef.current?.getBoundingClientRect() ?? null;
 
@@ -134,7 +179,7 @@ function App() {
             value: false,
           };
 
-    setNodes((nodesState) => ({ ...nodesState, [id]: newNode }));
+    applyNodes({ ...nodesRef.current, [id]: newNode });
   };
 
   const addChipAt = (chipId: string, point: Point) => {
@@ -144,6 +189,7 @@ function App() {
     const leftPercent = clampPercentFromPx(point.x, GATE_SIZE, rect.width);
     const topPercent = clampPercentFromPx(point.y, GATE_SIZE, rect.height);
     const id = createId();
+    const current = nodesRef.current;
 
     if (chipId === "not") {
       const newNode: NotType = {
@@ -154,7 +200,7 @@ function App() {
         onMainCanvas: true,
         value: false,
       };
-      setNodes((nodesState) => ({ ...nodesState, [id]: newNode }));
+      applyNodes({ ...current, [id]: newNode });
       return;
     }
 
@@ -177,11 +223,29 @@ function App() {
       value: false,
     };
 
-    setNodes((nodesState) => ({
-      ...nodesState,
+    applyNodes({
+      ...current,
       ...chipNodes,
       [id]: newNode,
-    }));
+    });
+    simulation.primeConnections(chipNodes);
+  };
+
+  /** Add a connection from `from` to `to`, or report that it was invalid. */
+  const connectFrom = (base: NodesMap, from: NodeID, to: NodeID): boolean => {
+    const next = createConnection(base, from, to);
+    if (next === base) {
+      return false;
+    }
+
+    applyNodes(next);
+    const created = Object.values(next).find(
+      (node) => node.type === "connection" && !base[node.id],
+    );
+    if (created?.type === "connection") {
+      simulation.startConnection(next, created.id);
+    }
+    return true;
   };
 
   const handleDelete = (nodeId: string) => {
@@ -193,21 +257,35 @@ function App() {
     ) {
       cleanupRef.current?.();
     }
-    setNodes((nodesState) => deleteNode(nodesState, nodeId));
+
+    const current = nodesRef.current;
+    const next = deleteNode(current, nodeId);
+    if (next === current) {
+      return;
+    }
+
+    const removedConnections = Object.keys(current).filter(
+      (id) => current[id].type === "connection" && !next[id],
+    );
+    simulation.forgetConnections(removedConnections);
+    applyNodes(next);
+    // Deleting is a structural change: trust the settled map immediately.
+    simulation.primeArrivals(next);
   };
 
   const toggleInput = (nodeId: NodeID) => {
-    setNodes((nodesState) => {
-      const current = nodesState[nodeId];
-      if (!current || current.type !== "input") {
-        return nodesState;
-      }
-      const nextNodes = {
-        ...nodesState,
-        [current.id]: { ...current, value: !current.value },
-      };
-      return propagate(nextNodes, [current.id]);
-    });
+    const current = nodesRef.current;
+    const node = current[nodeId];
+    if (!node || node.type !== "input") {
+      return;
+    }
+
+    const next = {
+      ...current,
+      [nodeId]: { ...node, value: !node.value },
+    };
+    applyNodes(next);
+    simulation.emitFrom(next, nodeId);
   };
 
   const beginSession = (session: DragSession) => {
@@ -248,17 +326,17 @@ function App() {
             ? rect.height / 2
             : clamp(local.y - session.offset.y, GATE_SIZE / 2, rect.height - GATE_SIZE / 2);
 
-        setNodes((nodesState) => {
-          const current = nodesState[session.id];
-          if (!current) return nodesState;
-          return {
-            ...nodesState,
-            [session.id]: {
-              ...current,
-              leftPercent: (centerX / rect.width) * 100,
-              topPercent: (centerY / rect.height) * 100,
-            },
-          };
+        const current = nodesRef.current;
+        const node = current[session.id];
+        if (!node) return;
+
+        applyNodes({
+          ...current,
+          [session.id]: {
+            ...node,
+            leftPercent: (centerX / rect.width) * 100,
+            topPercent: (centerY / rect.height) * 100,
+          },
         });
         return;
       }
@@ -283,15 +361,67 @@ function App() {
         event.clientY <= rect.bottom;
 
       if (session.kind === "connect") {
-        if (session.moved) {
-          const sinkId = findSinkAt(event.clientX, event.clientY);
-          if (sinkId) {
-            setNodes((nodesState) => createConnection(nodesState, session.from, sinkId));
+        if (!session.moved) {
+          const node = nodesRef.current[session.from];
+          if (
+            session.fromRole === "source" &&
+            node?.type === "input" &&
+            node.onMainCanvas
+          ) {
+            toggleInput(session.from);
           }
         } else {
-          const node = nodesRef.current[session.from];
-          if (node?.type === "input" && node.onMainCanvas) {
-            toggleInput(session.from);
+          const target = findPinAt(event.clientX, event.clientY);
+          let connected = false;
+
+          if (target) {
+            if (session.fromRole === "source" && target.role === "sink") {
+              connected = connectFrom(nodesRef.current, session.from, target.id);
+            } else if (session.fromRole === "sink" && target.role === "source") {
+              connected = connectFrom(nodesRef.current, target.id, session.from);
+            }
+          }
+
+          if (!connected && session.fromRole === "source") {
+            const sinkId = findSinkAt(event.clientX, event.clientY);
+            if (sinkId) {
+              connected = connectFrom(nodesRef.current, session.from, sinkId);
+            }
+          }
+
+          if (!connected && rect && local && insideCanvas) {
+            let type: "input" | "output" | null = null;
+            if (local.x <= EDGE_ZONE_PX) {
+              type = "input";
+            } else if (local.x >= rect.width - EDGE_ZONE_PX) {
+              type = "output";
+            }
+
+            if (type) {
+              const nodeId = createId();
+              const newNode: NodeType = {
+                id: nodeId,
+                type,
+                leftPercent: type === "input" ? 0 : 100,
+                topPercent: clampPercentFromPx(local.y, PIN_HIT_SIZE, rect.height),
+                onMainCanvas: true,
+                value: false,
+              };
+              const withNode = { ...nodesRef.current, [nodeId]: newNode };
+              const canConnect =
+                (type === "output" && session.fromRole === "source") ||
+                (type === "input" && session.fromRole === "sink");
+
+              if (canConnect) {
+                const sourceId = type === "input" ? nodeId : session.from;
+                const sinkId = type === "input" ? session.from : nodeId;
+                if (!connectFrom(withNode, sourceId, sinkId)) {
+                  applyNodes(withNode);
+                }
+              } else {
+                applyNodes(withNode);
+              }
+            }
           }
         }
       } else if (session.kind === "canvas") {
@@ -338,6 +468,13 @@ function App() {
     const target = event.target as HTMLElement;
     if (target.closest("[data-delete]")) return;
 
+    const connectionDelete = target.closest<HTMLElement>("[data-delete-connection]");
+    if (connectionDelete?.dataset.deleteConnection) {
+      event.preventDefault();
+      handleDelete(connectionDelete.dataset.deleteConnection);
+      return;
+    }
+
     const rect = getCanvasRect();
     if (!rect) return;
 
@@ -354,7 +491,8 @@ function App() {
 
     const pin = target.closest<HTMLElement>("[data-pin-role]");
     if (pin) {
-      if (pin.dataset.pinRole !== "source" || !pin.dataset.nodeId) {
+      const role = pin.dataset.pinRole;
+      if ((role !== "source" && role !== "sink") || !pin.dataset.nodeId) {
         return;
       }
 
@@ -368,6 +506,7 @@ function App() {
         ...base,
         kind: "connect",
         from: pin.dataset.nodeId,
+        fromRole: role,
         fromPoint,
       });
       setConnectPreview({ from: fromPoint, to: local });
@@ -421,8 +560,9 @@ function App() {
     const name = prompt("Chip name");
     if (!name) return;
 
+    const current = nodesRef.current;
     const nodeCopy: NodesMap = {};
-    for (const [nodeId, node] of Object.entries(nodes)) {
+    for (const [nodeId, node] of Object.entries(current)) {
       nodeCopy[nodeId] = { ...node, onMainCanvas: false } as NodeType;
     }
 
@@ -432,10 +572,10 @@ function App() {
       type: "chip",
       nodes: nodeCopy,
       name,
-      inputs: Object.values(nodes)
+      inputs: Object.values(current)
         .filter((node) => node.type === "input" && node.onMainCanvas)
         .map((node) => node.id),
-      outputs: Object.values(nodes)
+      outputs: Object.values(current)
         .filter((node) => node.type === "output" && node.onMainCanvas)
         .map((node) => node.id),
       onMainCanvas: false,
@@ -445,8 +585,9 @@ function App() {
     };
 
     cleanupRef.current?.();
+    simulation.clear();
     setChips((currentChips) => ({ ...currentChips, [id]: chip }));
-    setNodes({});
+    applyNodes({});
   };
 
   const visibleNodes = Object.values(nodes).filter((node) => node.onMainCanvas);
@@ -528,7 +669,8 @@ function App() {
                 className={"rounded-md bg-red-700 p-2 text-xs text-white uppercase md:text-sm"}
                 onClick={() => {
                   cleanupRef.current?.();
-                  setNodes({});
+                  simulation.clear();
+                  applyNodes({});
                 }}
               >
                 Clear

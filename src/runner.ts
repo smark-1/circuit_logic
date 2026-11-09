@@ -112,7 +112,9 @@ function canBeSink(node: NodeType): boolean {
 }
 
 /**
- * Add a connection and immediately settle the affected part of the circuit.
+ * Add a connection without moving any signal. The caller is responsible for
+ * scheduling the first pulse from the source (see `simulation.ts`).
+ *
  * Returns the original map when the connection would be a duplicate or is
  * invalid (for example an output feeding another output).
  */
@@ -120,7 +122,12 @@ export function createConnection(nodes: NodesMap, from: NodeID, to: NodeID): Nod
     const source = nodes[from];
     const sink = nodes[to];
 
-    if (!source || !sink || from === to) {
+    if (!source || !sink) {
+        return nodes;
+    }
+    // A NOT gate is both a source and a sink, so feeding it back into itself
+    // is how a clock/oscillator is built.
+    if (from === to && source.type !== "not") {
         return nodes;
     }
     if (!canBeSource(source) || !canBeSink(sink)) {
@@ -141,11 +148,11 @@ export function createConnection(nodes: NodesMap, from: NodeID, to: NodeID): Nod
         to,
         leftPercent: 0,
         topPercent: 0,
-        value: outputValue(source),
+        value: false,
         onMainCanvas: true,
     };
 
-    return propagate({...nodes, [id]: connection}, [from, id]);
+    return {...nodes, [id]: connection};
 }
 
 function settleTargets(nodes: NodesMap, targetIds: Iterable<NodeID>): NodesMap {
@@ -186,6 +193,17 @@ export function deleteNode(nodes: NodesMap, id: NodeID): NodesMap {
     }
 
     const removed = new Set<NodeID>([id]);
+    if (node.type === "connection") {
+        // Removing a wire changes its target's input, even though the target
+        // itself is not being removed.
+        const next: NodesMap = {};
+        for (const [candidateId, candidate] of Object.entries(nodes)) {
+            if (candidateId !== id) {
+                next[candidateId] = candidate;
+            }
+        }
+        return settleTargets(next, [node.to]);
+    }
     if (node.type === "chip") {
         for (const internalId of GetAllIds(node.nodes)) {
             removed.add(internalId);
