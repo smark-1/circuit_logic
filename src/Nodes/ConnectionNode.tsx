@@ -74,7 +74,7 @@ export default function ConnectionNode(props: {
                 style={{left: `${midX}%`, top: `${midY}%`}}
                 title={"Delete connection"}
             >
-                <div className={"pointer-events-none flex h-6 w-6 items-center justify-center rounded-full bg-red-500/80 text-xs font-bold text-white opacity-70 shadow transition group-hover:opacity-100"}>
+                <div className={"delete-reveal pointer-events-none flex h-6 w-6 items-center justify-center rounded-full bg-red-500/80 text-xs font-bold text-white opacity-70 shadow transition"}>
                     ×
                 </div>
             </div>

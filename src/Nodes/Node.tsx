@@ -54,7 +54,7 @@ export default function Node(props: {
 
   return (
     <div
-      className={"absolute"}
+      className={"group absolute"}
       style={{
         left: `${props.node.leftPercent}%`,
         top: `${props.node.topPercent}%`,
@@ -66,9 +66,9 @@ export default function Node(props: {
         <button
           type="button"
           data-delete
-          className={`absolute -top-2 ${
+          className={`delete-reveal absolute -top-2 ${
             props.node.type === "output" ? "-left-2" : "-right-2"
-          } z-10 flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-sm font-bold text-white opacity-80 shadow-md transition hover:bg-red-600 hover:opacity-100`}
+          } z-10 flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-sm font-bold text-white opacity-70 shadow-md transition hover:bg-red-600`}
           onClick={(event) => {
             event.stopPropagation();
             props.handleDelete?.(props.node.id);
