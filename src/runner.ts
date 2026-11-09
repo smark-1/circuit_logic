@@ -83,6 +83,14 @@ export function propagate(nodes: NodesMap, startIds: NodeID[]): NodesMap {
     return next;
 }
 
+/**
+ * Bring every node in the map to a consistent state. Useful after loading a
+ * chip template whose stored values may be stale.
+ */
+export function settle(nodes: NodesMap): NodesMap {
+    return propagate(nodes, Object.keys(nodes));
+}
+
 function canBeSource(node: NodeType): boolean {
     if (node.type === "not") {
         return true;

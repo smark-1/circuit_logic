@@ -38,3 +38,55 @@ export function GetAllIds(nodes: { [key: string]: NodeType }): NodeID[] {
     }
     return ids
 }
+
+/**
+ * Clone a chip template with fresh IDs.
+ *
+ * A Map is used instead of replacing ID strings with a regex: IDs are opaque
+ * and can contain characters that are special in a regular expression, and a
+ * substring match could rewrite an unrelated ID that happens to contain it.
+ */
+export function remapChip(chip: ChipType): ChipType {
+    const idMap = new Map<NodeID, NodeID>()
+    for (const id of GetAllIds(chip.nodes)) {
+        if (!idMap.has(id)) {
+            idMap.set(id, createId())
+        }
+    }
+
+    const mapId = (id: NodeID): NodeID => idMap.get(id) ?? id
+
+    const remapNodes = (nodes: NodesMap): NodesMap => {
+        const next: NodesMap = {}
+        for (const [id, node] of Object.entries(nodes)) {
+            const newId = mapId(id)
+            if (node.type === "connection") {
+                next[newId] = {
+                    ...node,
+                    id: newId,
+                    from: mapId(node.from),
+                    to: mapId(node.to),
+                }
+            } else if (node.type === "chip") {
+                next[newId] = {
+                    ...node,
+                    id: newId,
+                    inputs: node.inputs.map(mapId),
+                    outputs: node.outputs.map(mapId),
+                    nodes: remapNodes(node.nodes),
+                }
+            } else {
+                next[newId] = {...node, id: newId}
+            }
+        }
+        return next
+    }
+
+    return {
+        ...chip,
+        id: mapId(chip.id),
+        inputs: chip.inputs.map(mapId),
+        outputs: chip.outputs.map(mapId),
+        nodes: remapNodes(chip.nodes),
+    }
+}

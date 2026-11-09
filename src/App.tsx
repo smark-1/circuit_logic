@@ -16,8 +16,8 @@ import type {
   NotType,
 } from "./types.ts";
 import { canvasContext, nodeContext } from "./appContext.ts";
-import { GetAllIds, createId } from "./utils.ts";
-import { createConnection, deleteNode, propagate } from "./runner.ts";
+import { createId, remapChip } from "./utils.ts";
+import { createConnection, deleteNode, propagate, settle } from "./runner.ts";
 import Chip from "./Gates/Chip.tsx";
 import Not from "./Gates/Not.tsx";
 import defaultChips from "./defaultChips.json";
@@ -161,12 +161,8 @@ function App() {
     const template = chipsRef.current[chipId];
     if (!template) return;
 
-    let chip = template;
-    let chipString = JSON.stringify(chip);
-    for (const nodeId of GetAllIds(chip.nodes)) {
-      chipString = chipString.replace(new RegExp(nodeId, "g"), createId());
-    }
-    chip = JSON.parse(chipString);
+    const chip = remapChip(template);
+    const chipNodes = settle(chip.nodes);
 
     const newNode: ChipType = {
       id,
@@ -176,14 +172,14 @@ function App() {
       onMainCanvas: true,
       inputs: chip.inputs,
       outputs: chip.outputs,
-      nodes: chip.nodes,
+      nodes: chipNodes,
       name: chip.name,
       value: false,
     };
 
     setNodes((nodesState) => ({
       ...nodesState,
-      ...chip.nodes,
+      ...chipNodes,
       [id]: newNode,
     }));
   };

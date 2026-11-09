@@ -1,40 +1,27 @@
 import {ConnectionType} from "../types.ts";
 import {motion} from "motion/react"
-import {useContext, useEffect, useRef, useState} from "react";
+import {useContext} from "react";
 import {canvasContext, nodeContext} from "../appContext.ts";
+import {CONNECTION_ANIMATION_SECONDS} from "../constants.ts";
 import {nodeAnchorX} from "../geometry.ts";
 import {getNodes} from "../utils.ts";
+import type {TargetAndTransition} from "motion/react";
+
+const variants: Record<"on" | "off", TargetAndTransition> = {
+    on: {
+        strokeDashoffset: [1, 0],
+        opacity: 1,
+    },
+    off: {
+        strokeDashoffset: [0, -1],
+    },
+}
 
 export default function ConnectionNode(props: {
     node: ConnectionType,
 }) {
     const nodesContext = useContext(nodeContext)
     const {width, height} = useContext(canvasContext)
-    const lineRef = useRef<SVGLineElement>(null)
-    const [strokeTotalLength, setStrokeTotalLength] = useState(10000)
-
-    const variants = {
-        on: {
-            strokeDashoffset: [strokeTotalLength, 0],
-            opacity: 1,
-        },
-        off: {
-            strokeDashoffset: [0, -strokeTotalLength],
-        }
-    }
-
-    useEffect(() => {
-        if (!lineRef.current) {
-            return;
-        }
-
-        setTimeout(() => {
-                if (lineRef.current) {
-                    setStrokeTotalLength(lineRef.current.getTotalLength())
-                }
-            }
-            , 50)
-    }, [props.node])
 
     if (!props.node.onMainCanvas) {
         return null;
@@ -50,11 +37,12 @@ export default function ConnectionNode(props: {
     const toX = nodeAnchorX(toNode, "to", width)
 
     return (
-        <div className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}>
-
+        <div
+            data-connection-id={props.node.id}
+            className={"absolute left-0 right-0 top-0 bottom-0 pointer-events-none"}
+        >
             <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
                 <line
-                    ref={lineRef}
                     y1={`${fromNode.topPercent}%`}
                     x1={`${fromX}%`}
                     x2={`${toX}%`}
@@ -65,16 +53,17 @@ export default function ConnectionNode(props: {
                 <motion.line
                     variants={variants}
                     animate={props.node.value ? "on" : "off"}
-                    transition={{duration: strokeTotalLength / 1000}}
+                    transition={{duration: CONNECTION_ANIMATION_SECONDS}}
+                    pathLength={1}
                     x1={`${fromX}%`}
                     y1={`${fromNode.topPercent}%`}
                     x2={`${toX}%`}
                     y2={`${toNode.topPercent}%`}
                     strokeLinecap={"round"}
                     strokeLinejoin={"round"}
-                    strokeDasharray={strokeTotalLength}
+                    strokeDasharray={1}
                     opacity={1}
-                    strokeDashoffset={strokeTotalLength}
+                    strokeDashoffset={1}
                     style={{stroke: "red", strokeWidth: 4}}/>
             </svg>
         </div>
