@@ -1,271 +1,630 @@
 import Node from "./Nodes/Node.tsx";
-import { type DragEvent, type MouseEvent, useEffect, useState } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
+  ChipMap,
   ChipType,
-  InputType,
   NodeID,
+  NodesMap,
   NodeType,
   NotType,
-  OutputType,
 } from "./types.ts";
-import { dragContext, nodeContext } from "./appContext.ts";
-import { GetAllIds } from "./utils.ts";
-import runner from "./runner.ts";
+import { canvasContext, nodeContext } from "./appContext.ts";
+import { createId, remapChip } from "./utils.ts";
+import { createConnection, deleteNode, settle } from "./runner.ts";
+import { createSimulation, type Simulation } from "./simulation.ts";
 import Chip from "./Gates/Chip.tsx";
 import Not from "./Gates/Not.tsx";
 import defaultChips from "./defaultChips.json";
+import {
+  DRAG_THRESHOLD_PX,
+  EDGE_ZONE_PX,
+  GATE_SIZE,
+  PIN_HIT_SIZE,
+} from "./constants.ts";
+import { clamp, clampPercentFromPx } from "./geometry.ts";
+
+type Point = { x: number; y: number };
+type PinRole = "source" | "sink";
+
+type SessionBase = {
+  pointerId: number;
+  startClient: Point;
+  client: Point;
+  moved: boolean;
+};
+
+type DragSession =
+  | (SessionBase & {
+      kind: "connect";
+      from: NodeID;
+      fromRole: PinRole;
+      fromPoint: Point;
+    })
+  | (SessionBase & { kind: "move"; id: NodeID; offset: Point })
+  | (SessionBase & { kind: "canvas" })
+  | (SessionBase & { kind: "palette"; chipId: string });
+
+function distance(a: Point, b: Point): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function findPinAt(
+  clientX: number,
+  clientY: number,
+): { id: NodeID; role: PinRole } | null {
+  const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+  const pin = element?.closest<HTMLElement>("[data-pin-role]");
+  const id = pin?.dataset.nodeId;
+  const role = pin?.dataset.pinRole;
+  if (!id || (role !== "source" && role !== "sink")) {
+    return null;
+  }
+  return { id, role };
+}
+
+function findSinkAt(clientX: number, clientY: number): NodeID | null {
+  const pin = findPinAt(clientX, clientY);
+  if (pin) {
+    return pin.role === "sink" ? pin.id : null;
+  }
+  const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+  const sink = element?.closest<HTMLElement>("[data-sink-id]");
+  return sink?.dataset.sinkId ?? null;
+}
 
 function App() {
-  const [nodes, setNodes] = useState<{ [key: string]: NodeType }>({});
-  const [chips, setChips] = useState<{ [key: string]: ChipType }>(
-    defaultChips as { [key: string]: ChipType },
-  );
-  const [drag, setDrag] = useState<{
-    start: null | NodeID;
-    end: null | NodeID;
-  }>({ start: null, end: null });
-  const [initialDragPos, setInitialDragPos] = useState({ x: 0, y: 0 });
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  const [changedNodes, setChangedNodes] = useState<
-    { node: NodeType; duration: number }[] | []
-  >([]);
-  const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null);
+  const [nodes, setNodes] = useState<NodesMap>({});
+  const [chips, setChips] = useState<ChipMap>(defaultChips as ChipMap);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [connectPreview, setConnectPreview] = useState<{ from: Point; to: Point } | null>(null);
+  const [palettePreview, setPalettePreview] = useState<{ chipId: string; client: Point } | null>(null);
+
+  const nodesRef = useRef(nodes);
+  const chipsRef = useRef(chips);
+  const canvasSizeRef = useRef(canvasSize);
+  const sessionRef = useRef<DragSession | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  const simulationRef = useRef<Simulation | null>(null);
+
+  if (simulationRef.current === null) {
+    simulationRef.current = createSimulation({
+      getNodes: () => nodesRef.current,
+      applyNodes: (next) => {
+        nodesRef.current = next;
+        setNodes(next);
+      },
+      getCanvasSize: () => canvasSizeRef.current,
+    });
+  }
+  const simulation = simulationRef.current!;
+
+  /** Keep the simulated nodes and React state in lockstep. */
+  const applyNodes = (next: NodesMap) => {
+    nodesRef.current = next;
+    setNodes(next);
+  };
 
   useEffect(() => {
-    if (changedNodes.length > 0) {
-      for (const node of changedNodes) {
-        setTimeout(() => {
-          handleNodeChange(node.node);
-        }, node.duration);
-      }
-      setChangedNodes([]);
-    }
-  }, [changedNodes]);
+    nodesRef.current = nodes;
+  }, [nodes]);
 
-  // Update canvas rect when component mounts or window resizes
   useEffect(() => {
-    const updateCanvasRect = () => {
-      const canvasDiv = document.querySelector('.bg-slate-800') as HTMLElement;
-      if (canvasDiv) {
-        setCanvasRect(canvasDiv.getBoundingClientRect());
-      }
+    chipsRef.current = chips;
+  }, [chips]);
+
+  useEffect(() => () => cleanupRef.current?.(), []);
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const updateSize = () => {
+      const rect = canvas.getBoundingClientRect();
+      const size = { width: rect.width, height: rect.height };
+      canvasSizeRef.current = size;
+      setCanvasSize(size);
     };
 
-    updateCanvasRect();
-    window.addEventListener('resize', updateCanvasRect);
-    return () => window.removeEventListener('resize', updateCanvasRect);
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(canvas);
+    return () => observer.disconnect();
   }, []);
 
-  const addNode = (e: MouseEvent<HTMLElement>) => {
-    if (e.target !== e.currentTarget) return;
+  useEffect(() => () => simulation.clear(), [simulation]);
 
-    // Get the actual canvas div from the DOM
-    const canvasDiv = document.querySelector('.bg-slate-800') as HTMLElement;
-    if (!canvasDiv) return;
+  const getCanvasRect = () => canvasRef.current?.getBoundingClientRect() ?? null;
 
-    const overlayRect = e.currentTarget.getBoundingClientRect();
-    const canvasRect = canvasDiv.getBoundingClientRect();
+  const addNodeAt = (point: Point) => {
+    const rect = getCanvasRect();
+    if (!rect) return;
 
-    // Calculate position relative to the overlay
-    const overlayX = e.clientX - overlayRect.left;
-    const overlayY = e.clientY - overlayRect.top;
-
-    // Define the extension area (reduce from 6% to 3% for more precision)
-    const extensionPercent = 3;
-    const extensionPixels = (canvasRect.width * extensionPercent) / 100;
-
-    // Calculate where the canvas starts and ends within the overlay
-    const canvasStartX = canvasRect.left - overlayRect.left;
-    const canvasEndX = canvasRect.right - overlayRect.left;
-
-    const id = Math.random().toString();
-
-    let newNode = {
-      id: id,
-      leftPercent: 0,
-      topPercent: (overlayY / overlayRect.height) * 100,
-      onMainCanvas: true,
-    } as NodeType;
-
-    // Check if click is in the left extension area or within left 6% of canvas
-    if (overlayX <= canvasStartX + extensionPixels) {
-      newNode = {
-        ...newNode,
-        type: "input",
-        leftPercent: 0,
-        value: false,
-      } as InputType;
-    }
-    // Check if click is in the right extension area or within right 6% of canvas
-    else if (overlayX >= canvasEndX - extensionPixels) {
-      newNode = {
-        ...newNode,
-        type: "output",
-        leftPercent: 100,
-        value: false,
-      } as OutputType;
+    let type: "input" | "output";
+    let leftPercent: number;
+    if (point.x <= EDGE_ZONE_PX) {
+      type = "input";
+      leftPercent = 0;
+    } else if (point.x >= rect.width - EDGE_ZONE_PX) {
+      type = "output";
+      leftPercent = 100;
     } else {
       return;
     }
 
-    setNodes((nodes) => ({ ...nodes, [id]: newNode }));
+    const id = createId();
+    const newNode: NodeType =
+      type === "input"
+        ? {
+            id,
+            type,
+            leftPercent,
+            topPercent: clampPercentFromPx(point.y, PIN_HIT_SIZE, rect.height),
+            onMainCanvas: true,
+            value: false,
+          }
+        : {
+            id,
+            type,
+            leftPercent,
+            topPercent: clampPercentFromPx(point.y, PIN_HIT_SIZE, rect.height),
+            onMainCanvas: true,
+            value: false,
+          };
+
+    applyNodes({ ...nodesRef.current, [id]: newNode });
   };
 
-  const handleNodeChange = (node: NodeType) => {
-    setNodes((nodesState) => {
-      const runValues = runner(nodesState, node);
-      for (const id in runValues.changed) {
-        const n2 = runValues.changed[id];
-        setChangedNodes((changes) => [...changes, n2]);
-      }
-      return runValues.nodes;
+  const addChipAt = (chipId: string, point: Point) => {
+    const rect = getCanvasRect();
+    if (!rect) return;
+
+    const leftPercent = clampPercentFromPx(point.x, GATE_SIZE, rect.width);
+    const topPercent = clampPercentFromPx(point.y, GATE_SIZE, rect.height);
+    const id = createId();
+    const current = nodesRef.current;
+
+    if (chipId === "not") {
+      const newNode: NotType = {
+        id,
+        type: "not",
+        leftPercent,
+        topPercent,
+        onMainCanvas: true,
+        value: false,
+      };
+      applyNodes({ ...current, [id]: newNode });
+      return;
+    }
+
+    const template = chipsRef.current[chipId];
+    if (!template) return;
+
+    const chip = remapChip(template);
+    const chipNodes = settle(chip.nodes);
+
+    const newNode: ChipType = {
+      id,
+      type: "chip",
+      leftPercent,
+      topPercent,
+      onMainCanvas: true,
+      inputs: chip.inputs,
+      outputs: chip.outputs,
+      nodes: chipNodes,
+      name: chip.name,
+      value: false,
+    };
+
+    applyNodes({
+      ...current,
+      ...chipNodes,
+      [id]: newNode,
     });
+    simulation.primeConnections(chipNodes);
   };
 
-  const reactNodes = Object.values(nodes)
-    .filter((node) => node.onMainCanvas)
-    .map((node) => {
-      return (
-        <div
-            key={node.id}
-          draggable={["not", "chip"].includes(node.type)}
-          onDragStart={(e) => {
-            e.dataTransfer.setData("nodeMove", node.id);
-          }}
-        >
-          <Node
-            handleDelete={() => {
-              setNodes((nodes) => {
-                const nodeIdToDelete = node.id;
-                const newNodes = { ...nodes };
-                const nodeToDelete = newNodes[nodeIdToDelete];
+  /** Add a connection from `from` to `to`, or report that it was invalid. */
+  const connectFrom = (base: NodesMap, from: NodeID, to: NodeID): boolean => {
+    const next = createConnection(base, from, to);
+    if (next === base) {
+      return false;
+    }
 
-                if (!nodeToDelete) {
-                  // Nothing to delete
-                  return newNodes;
-                }
-
-                // Handle chips specially
-                if (nodeToDelete.type === "chip") {
-                  // Gather all IDs that live inside this chip
-                  let internalIds = Object.keys(nodeToDelete.nodes || {});
-
-                  // Add inputs and outputs to the internal IDs list
-                  if (nodeToDelete.inputs)
-                    internalIds = internalIds.concat(nodeToDelete.inputs);
-                  if (nodeToDelete.outputs)
-                    internalIds = internalIds.concat(nodeToDelete.outputs);
-
-                  console.log("inputs", nodeToDelete.inputs);
-                  console.log("outputs", nodeToDelete.outputs);
-                  console.log("internal ids", internalIds);
-
-                  // Delete all internal nodes
-                  for (const id of internalIds) {
-                    delete newNodes[id];
-                  }
-
-                  // Find and delete all connection nodes that reference any input/output of this chip
-                  const connectionsToDelete = [];
-
-                  for (const nodeId in newNodes) {
-                    const currentNode = newNodes[nodeId];
-
-                    if (currentNode.type === "connection") {
-                      console.log("checking connection", currentNode);
-
-                      // Check if connection's 'from' or 'to' is in the chip's inputs or outputs arrays
-                      const fromIsChipIO =
-                        nodeToDelete.inputs?.includes(currentNode.from) ||
-                        nodeToDelete.outputs?.includes(currentNode.from);
-
-                      const toIsChipIO =
-                        nodeToDelete.inputs?.includes(currentNode.to) ||
-                        nodeToDelete.outputs?.includes(currentNode.to);
-
-                      if (fromIsChipIO || toIsChipIO) {
-                        connectionsToDelete.push(nodeId);
-                        console.log("adding connection to delete:", nodeId);
-                      }
-                    }
-                  }
-
-                  // Delete all identified connection nodes
-                  for (const id of connectionsToDelete) {
-                    delete newNodes[id];
-                  }
-                } else {
-                  // For non-chip nodes, delete any connection that references this node
-                  const connectionsToDelete = [];
-
-                  for (const nodeId in newNodes) {
-                    const currentNode = newNodes[nodeId];
-
-                    if (currentNode.type === "connection") {
-                      if (
-                        currentNode.from === nodeIdToDelete ||
-                        currentNode.to === nodeIdToDelete
-                      ) {
-                        connectionsToDelete.push(nodeId);
-                      }
-                    }
-                  }
-
-                  // Delete all identified connection nodes
-                  for (const id of connectionsToDelete) {
-                    delete newNodes[id];
-                  }
-                }
-
-                // Finally delete the node itself
-                delete newNodes[nodeIdToDelete];
-                console.log("new nodes", newNodes);
-                return newNodes;
-              });
-              // Reset drag state if it references the deleted node
-              setDrag((dragState) => {
-                if (dragState.start === node.id || dragState.end === node.id) {
-                  return { start: null, end: null };
-                }
-                return dragState;
-              });
-            }}
-            node={node}
-            handleTriggerChange={(node) => {
-              setNodes((nodes: { [key: string]: NodeType }) => {
-                const n2 = { ...node, value: !node.value };
-                return { ...nodes, [node.id]: n2 };
-              });
-              setChangedNodes([...changedNodes, { node: { ...node, value: !node.value }, duration: 10 }]);
-            }}
-          />
-        </div>
-      );
-    });
-
-  const reactChips = Object.values(chips).map((chip) => {
-    return (
-      <div
-        key={chip.id}
-        draggable={true}
-        onDragStart={(e) => {
-          e.dataTransfer.setData("newChip", chip.id);
-        }}
-      >
-        <div className={"pointer-events-none"}>
-          <Chip chip={chip} />
-        </div>
-      </div>
+    applyNodes(next);
+    const created = Object.values(next).find(
+      (node) => node.type === "connection" && !base[node.id],
     );
-  });
+    if (created?.type === "connection") {
+      simulation.startConnection(next, created.id);
+    }
+    return true;
+  };
+
+  const handleDelete = (nodeId: string) => {
+    const session = sessionRef.current;
+    if (
+      session &&
+      ((session.kind === "move" && session.id === nodeId) ||
+        (session.kind === "connect" && session.from === nodeId))
+    ) {
+      cleanupRef.current?.();
+    }
+
+    const current = nodesRef.current;
+    const next = deleteNode(current, nodeId);
+    if (next === current) {
+      return;
+    }
+
+    const removedConnections = Object.keys(current).filter(
+      (id) => current[id].type === "connection" && !next[id],
+    );
+    simulation.forgetConnections(removedConnections);
+    applyNodes(next);
+    // Deleting is a structural change: trust the settled map immediately.
+    simulation.primeArrivals(next);
+  };
+
+  const toggleInput = (nodeId: NodeID) => {
+    const current = nodesRef.current;
+    const node = current[nodeId];
+    if (!node || node.type !== "input") {
+      return;
+    }
+
+    const next = {
+      ...current,
+      [nodeId]: { ...node, value: !node.value },
+    };
+    applyNodes(next);
+    simulation.emitFrom(next, nodeId);
+  };
+
+  const beginSession = (session: DragSession) => {
+    cleanupRef.current?.();
+    sessionRef.current = session;
+
+    const handleMove = (event: PointerEvent) => {
+      if (event.pointerId !== session.pointerId) return;
+
+      session.client = { x: event.clientX, y: event.clientY };
+      if (
+        !session.moved &&
+        distance(session.startClient, session.client) >= DRAG_THRESHOLD_PX
+      ) {
+        session.moved = true;
+      }
+      if (!session.moved) return;
+
+      const rect = getCanvasRect();
+      if (!rect) return;
+      const local = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
+
+      if (session.kind === "connect") {
+        setConnectPreview({ from: session.fromPoint, to: local });
+        return;
+      }
+
+      if (session.kind === "move") {
+        const centerX =
+          rect.width <= GATE_SIZE
+            ? rect.width / 2
+            : clamp(local.x - session.offset.x, GATE_SIZE / 2, rect.width - GATE_SIZE / 2);
+        const centerY =
+          rect.height <= GATE_SIZE
+            ? rect.height / 2
+            : clamp(local.y - session.offset.y, GATE_SIZE / 2, rect.height - GATE_SIZE / 2);
+
+        const current = nodesRef.current;
+        const node = current[session.id];
+        if (!node) return;
+
+        applyNodes({
+          ...current,
+          [session.id]: {
+            ...node,
+            leftPercent: (centerX / rect.width) * 100,
+            topPercent: (centerY / rect.height) * 100,
+          },
+        });
+        return;
+      }
+
+      if (session.kind === "palette") {
+        setPalettePreview({ chipId: session.chipId, client: session.client });
+      }
+    };
+
+    const handleUp = (event: PointerEvent) => {
+      if (event.pointerId !== session.pointerId) return;
+
+      const rect = getCanvasRect();
+      const local = rect
+        ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
+        : null;
+      const insideCanvas =
+        rect !== null &&
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom;
+
+      if (session.kind === "connect") {
+        if (!session.moved) {
+          const node = nodesRef.current[session.from];
+          if (
+            session.fromRole === "source" &&
+            node?.type === "input" &&
+            node.onMainCanvas
+          ) {
+            toggleInput(session.from);
+          }
+        } else {
+          const target = findPinAt(event.clientX, event.clientY);
+          let connected = false;
+
+          if (target) {
+            if (session.fromRole === "source" && target.role === "sink") {
+              connected = connectFrom(nodesRef.current, session.from, target.id);
+            } else if (session.fromRole === "sink" && target.role === "source") {
+              connected = connectFrom(nodesRef.current, target.id, session.from);
+            }
+          }
+
+          if (!connected && session.fromRole === "source") {
+            const sinkId = findSinkAt(event.clientX, event.clientY);
+            if (sinkId) {
+              connected = connectFrom(nodesRef.current, session.from, sinkId);
+            }
+          }
+
+          if (!connected && rect && local && insideCanvas) {
+            let type: "input" | "output" | null = null;
+            if (local.x <= EDGE_ZONE_PX) {
+              type = "input";
+            } else if (local.x >= rect.width - EDGE_ZONE_PX) {
+              type = "output";
+            }
+
+            if (type) {
+              const nodeId = createId();
+              const newNode: NodeType = {
+                id: nodeId,
+                type,
+                leftPercent: type === "input" ? 0 : 100,
+                topPercent: clampPercentFromPx(local.y, PIN_HIT_SIZE, rect.height),
+                onMainCanvas: true,
+                value: false,
+              };
+              const withNode = { ...nodesRef.current, [nodeId]: newNode };
+              const canConnect =
+                (type === "output" && session.fromRole === "source") ||
+                (type === "input" && session.fromRole === "sink");
+
+              if (canConnect) {
+                const sourceId = type === "input" ? nodeId : session.from;
+                const sinkId = type === "input" ? session.from : nodeId;
+                if (!connectFrom(withNode, sourceId, sinkId)) {
+                  applyNodes(withNode);
+                }
+              } else {
+                applyNodes(withNode);
+              }
+            }
+          }
+        }
+      } else if (session.kind === "canvas") {
+        if (!session.moved && local) {
+          addNodeAt(local);
+        }
+      } else if (session.kind === "palette") {
+        if (!session.moved) {
+          if (rect) {
+            addChipAt(session.chipId, { x: rect.width / 2, y: rect.height / 2 });
+          }
+        } else if (insideCanvas && local) {
+          addChipAt(session.chipId, local);
+        }
+      }
+
+      cleanup();
+    };
+
+    const handleCancel = (event: PointerEvent) => {
+      if (event.pointerId !== session.pointerId) return;
+      cleanup();
+    };
+
+    function cleanup() {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleCancel);
+      sessionRef.current = null;
+      cleanupRef.current = null;
+      setConnectPreview(null);
+      setPalettePreview(null);
+    }
+
+    cleanupRef.current = cleanup;
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleCancel);
+  };
+
+  const handleCanvasPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-delete]")) return;
+
+    const connectionDelete = target.closest<HTMLElement>("[data-delete-connection]");
+    if (connectionDelete?.dataset.deleteConnection) {
+      event.preventDefault();
+      handleDelete(connectionDelete.dataset.deleteConnection);
+      return;
+    }
+
+    const rect = getCanvasRect();
+    if (!rect) return;
+
+    const local = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+    const base: SessionBase = {
+      pointerId: event.pointerId,
+      startClient: { x: event.clientX, y: event.clientY },
+      client: { x: event.clientX, y: event.clientY },
+      moved: false,
+    };
+
+    const pin = target.closest<HTMLElement>("[data-pin-role]");
+    if (pin) {
+      const role = pin.dataset.pinRole;
+      if ((role !== "source" && role !== "sink") || !pin.dataset.nodeId) {
+        return;
+      }
+
+      event.preventDefault();
+      const pinRect = pin.getBoundingClientRect();
+      const fromPoint = {
+        x: pinRect.left + pinRect.width / 2 - rect.left,
+        y: pinRect.top + pinRect.height / 2 - rect.top,
+      };
+      beginSession({
+        ...base,
+        kind: "connect",
+        from: pin.dataset.nodeId,
+        fromRole: role,
+        fromPoint,
+      });
+      setConnectPreview({ from: fromPoint, to: local });
+      return;
+    }
+
+    const movable = target.closest<HTMLElement>('[data-movable="true"]');
+    if (movable) {
+      const id = movable.dataset.nodeId;
+      const node = id ? nodesRef.current[id] : undefined;
+      if (!id || !node) return;
+
+      event.preventDefault();
+      beginSession({
+        ...base,
+        kind: "move",
+        id,
+        offset: {
+          x: local.x - (node.leftPercent / 100) * rect.width,
+          y: local.y - (node.topPercent / 100) * rect.height,
+        },
+      });
+      return;
+    }
+
+    if (target !== event.currentTarget) {
+      return;
+    }
+
+    beginSession({ ...base, kind: "canvas" });
+  };
+
+  const startPaletteDrag = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    chipId: string,
+  ) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    const client = { x: event.clientX, y: event.clientY };
+    beginSession({
+      kind: "palette",
+      chipId,
+      pointerId: event.pointerId,
+      startClient: client,
+      client,
+      moved: false,
+    });
+  };
+
+  const saveChip = () => {
+    const name = prompt("Chip name");
+    if (!name) return;
+
+    const current = nodesRef.current;
+    const nodeCopy: NodesMap = {};
+    for (const [nodeId, node] of Object.entries(current)) {
+      nodeCopy[nodeId] = { ...node, onMainCanvas: false } as NodeType;
+    }
+
+    const id = createId();
+    const chip: ChipType = {
+      id,
+      type: "chip",
+      nodes: nodeCopy,
+      name,
+      inputs: Object.values(current)
+        .filter((node) => node.type === "input" && node.onMainCanvas)
+        .map((node) => node.id),
+      outputs: Object.values(current)
+        .filter((node) => node.type === "output" && node.onMainCanvas)
+        .map((node) => node.id),
+      onMainCanvas: false,
+      leftPercent: 0,
+      topPercent: 0,
+      value: false,
+    };
+
+    cleanupRef.current?.();
+    simulation.clear();
+    setChips((currentChips) => ({ ...currentChips, [id]: chip }));
+    applyNodes({});
+  };
+
+  const visibleNodes = Object.values(nodes).filter((node) => node.onMainCanvas);
+  const reactConnections = visibleNodes
+    .filter((node) => node.type === "connection")
+    .map((node) => <Node key={node.id} node={node} />);
+  const reactNodes = visibleNodes
+    .filter((node) => node.type !== "connection")
+    .map((node) => (
+      <div
+        key={node.id}
+        data-node-id={node.id}
+        data-movable={["not", "chip"].includes(node.type) ? "true" : undefined}
+      >
+        <Node node={node} handleDelete={handleDelete} />
+      </div>
+    ));
+
+  const reactChips = Object.values(chips).map((chip) => (
+    <div
+      key={chip.id}
+      className={"shrink-0 cursor-grab touch-pan-x select-none"}
+      onPointerDown={(event) => startPaletteDrag(event, chip.id)}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      <div className={"pointer-events-none"}>
+        <Chip chip={chip} />
+      </div>
+    </div>
+  ));
 
   reactChips.push(
     <div
       key={"not"}
-      draggable={true}
-      onDragStart={(e) => {
-        e.dataTransfer.setData("newChip", "not");
-      }}
+      className={"shrink-0 cursor-grab touch-pan-x select-none"}
+      onPointerDown={(event) => startPaletteDrag(event, "not")}
+      onContextMenu={(event) => event.preventDefault()}
     >
       <div className={"pointer-events-none"}>
         <Not
@@ -282,255 +641,101 @@ function App() {
     </div>,
   );
 
-  const handleMouseMove = (e: DragEvent<HTMLDivElement>) => {
-    if (!e.currentTarget) return;
-    const boundingRect = e.currentTarget.getBoundingClientRect();
-    setMousePos({
-      x: e.clientX - boundingRect.left,
-      y: e.clientY - boundingRect.top,
-      width: boundingRect.width,
-      height: boundingRect.height,
-    });
-  };
+  const nodeContextValue = useMemo(() => ({ nodes, setNodes }), [nodes]);
+  const canvasContextValue = useMemo(
+    () => ({ width: canvasSize.width, height: canvasSize.height }),
+    [canvasSize.width, canvasSize.height],
+  );
+  const previewChip = palettePreview ? chips[palettePreview.chipId] : undefined;
 
   return (
-    <nodeContext.Provider value={{ nodes, setNodes }}>
-      <dragContext.Provider value={{ drag, setDrag }}>
-        <div className={"w-full h-screen bg-slate-900 p-8 flex"}>
-          {/* Original canvas with normal layout and drag/drop functionality */}
-          <div
-            className={"w-[80vw] h-full bg-slate-800 relative"}
-            onClick={addNode}
-            onDragOver={(e) => {
-              handleMouseMove(e);
-              e.dataTransfer.dropEffect = "link";
-              e.preventDefault();
-            }}
-            onDragStart={(e) => {
-              setInitialDragPos({ x: e.pageX - 32, y: e.pageY - 32 });
-            }}
-            onDrop={(event) => {
-              if (event.dataTransfer.getData("newChip")) {
-                const id = Math.random().toString();
-
-                const rect = event.currentTarget.getBoundingClientRect();
-                const x = event.clientX - rect.left;
-                const y = event.clientY - rect.top;
-
-                let newNode = {
-                  id: id,
-                  leftPercent: (x / rect.width) * 100,
-                  topPercent: (y / rect.height) * 100,
-                  onMainCanvas: true,
-                } as NodeType;
-
-                const chipID = event.dataTransfer.getData("newChip");
-
-                if (chipID === "not") {
-                  newNode = {
-                    ...newNode,
-                    type: "not",
-                  } as NotType;
-                  setNodes((nodes) => ({ ...nodes, [id]: newNode }));
-                } else {
-                  // find and replace all ids in the chip with new random ids
-                  let chip = chips[chipID];
-                  let chipString = JSON.stringify(chip);
-
-                  for (const nodeId of GetAllIds(chip.nodes)) {
-                    chipString = chipString.replace(
-                      new RegExp(nodeId, "g"),
-                      Math.random().toString(),
-                    );
-                  }
-                  chip = JSON.parse(chipString);
-                  newNode = {
-                    ...newNode,
-                    type: "chip",
-                    inputs: chip.inputs,
-                    outputs: chip.outputs,
-                    nodes: chip.nodes,
-                    name: chip.name,
-                  } as ChipType;
-
-                  setNodes((nodes) => ({
-                    ...nodes,
-                    ...chip.nodes,
-                    [id]: newNode,
-                  }));
-                }
-              } else if (
-                event.dataTransfer.getData("nodeMove") &&
-                !drag.start
-              ) {
-                const id = event.dataTransfer.getData("nodeMove");
-                setNodes((nodes: { [key: string]: NodeType }) => {
-                  const n2 = nodes[id];
-                  n2.leftPercent = (mousePos.x / mousePos.width) * 100;
-                  n2.topPercent = (mousePos.y / mousePos.height) * 100;
-                  return { ...nodes, [id]: n2 };
-                });
-              } else {
-                setDrag({ start: null, end: null });
-              }
-            }}
-          >
-            {reactNodes}
-
-            {drag.start && (
-              <div
-                className={
-                  "absolute left-0 right-0 top-0 bottom-0 pointer-events-none"
-                }
+    <nodeContext.Provider value={nodeContextValue}>
+      <canvasContext.Provider value={canvasContextValue}>
+        <div className={"flex h-dvh w-full flex-col overflow-hidden bg-slate-900"}>
+          <div className={"flex items-center justify-between gap-2 px-2 pt-2 md:px-8 md:pt-4"}>
+            <p className={"text-xs uppercase tracking-wide text-slate-400 md:text-sm"}>
+              Circuit Logic
+            </p>
+            <div className={"flex gap-2"}>
+              <button
+                type="button"
+                className={"rounded-md bg-blue-500 p-2 text-xs text-white uppercase md:text-sm"}
+                onClick={saveChip}
               >
-                <svg
-                  height="100%"
-                  width="100%"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <line
-                    x1={`${initialDragPos.x}`}
-                    y1={`${initialDragPos.y}`}
-                    x2={`${mousePos.x}`}
-                    y2={`${mousePos.y}`}
-                    strokeLinecap={"round"}
-                    strokeLinejoin={"round"}
-                    style={{ stroke: "pink", strokeWidth: 4 }}
-                  />
-                </svg>
+                Save chip
+              </button>
+              <button
+                type="button"
+                className={"rounded-md bg-red-700 p-2 text-xs text-white uppercase md:text-sm"}
+                onClick={() => {
+                  cleanupRef.current?.();
+                  simulation.clear();
+                  applyNodes({});
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className={"flex min-h-0 flex-1 flex-col gap-2 p-2 md:flex-row md:p-8 md:pt-2"}>
+            <div
+              ref={canvasRef}
+              className={"relative min-h-0 flex-1 touch-none overflow-hidden bg-slate-800 select-none"}
+              onPointerDown={handleCanvasPointerDown}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              <div className={"pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-slate-700/70 to-transparent"} />
+              <div className={"pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-700/70 to-transparent"} />
+
+              {reactConnections}
+              {reactNodes}
+
+              {connectPreview && (
+                <div className={"pointer-events-none absolute inset-0"}>
+                  <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
+                    <line
+                      x1={connectPreview.from.x}
+                      y1={connectPreview.from.y}
+                      x2={connectPreview.to.x}
+                      y2={connectPreview.to.y}
+                      strokeLinecap={"round"}
+                      strokeLinejoin={"round"}
+                      style={{ stroke: "pink", strokeWidth: 4 }}
+                    />
+                  </svg>
+                </div>
+              )}
+            </div>
+
+            <div
+              className={"flex h-36 w-full shrink-0 gap-2 overflow-x-auto rounded-md bg-green-800 p-2 md:h-auto md:w-[20vw] md:flex-col md:items-center md:overflow-x-hidden md:overflow-y-auto"}
+            >
+              {reactChips}
+            </div>
+          </div>
+
+          {palettePreview && (
+            <div
+              className={"pointer-events-none fixed z-50 opacity-80"}
+              style={{
+                left: palettePreview.client.x,
+                top: palettePreview.client.y,
+                transform: "translate(-50%,-50%)",
+              }}
+            >
+              <div
+                className={"flex items-center justify-center rounded-lg bg-gray-600/90 p-4 text-center text-xl text-gray-50"}
+                style={{ width: GATE_SIZE, height: GATE_SIZE }}
+              >
+                {palettePreview.chipId === "not" ? "NOT" : previewChip?.name ?? ""}
               </div>
-            )}
-          </div>
-
-          {/* Left extension area - positioned 20px to the left of canvas */}
-          {canvasRect && (
-            <div
-              className={"absolute"}
-              style={{
-                left: canvasRect.left-20, // 20px outside canvas, minus 20px width
-                top: canvasRect.top,
-                width: '20px', // Fixed 20px width
-                height: canvasRect.height,
-                pointerEvents: 'auto',
-              }}
-              onClick={(e) => {
-                // For left extension, always create input nodes
-                if (e.target !== e.currentTarget) return;
-
-                const id = Math.random().toString();
-                const rect = e.currentTarget.getBoundingClientRect();
-                const y = e.clientY - rect.top;
-
-                const newNode = {
-                  id: id,
-                  type: "input",
-                  leftPercent: 0,
-                  topPercent: (y / rect.height) * 100,
-                  onMainCanvas: true,
-                  value: false,
-                } as InputType;
-
-                setNodes((nodes) => ({ ...nodes, [id]: newNode }));
-              }}
-            />
+            </div>
           )}
-
-          {/* Right extension area - positioned 20px to the right of canvas */}
-          {canvasRect && (
-            <div
-              className={"absolute"}
-              style={{
-                left: canvasRect.right, // 20px outside right edge of canvas
-                top: canvasRect.top,
-                width: '20px', // Fixed 20px width
-                height: canvasRect.height,
-                pointerEvents: 'auto',
-                zIndex: 10,
-              }}
-              onClick={(e) => {
-                // For right extension, always create output nodes
-                if (e.target !== e.currentTarget) return;
-
-                const id = Math.random().toString();
-                const rect = e.currentTarget.getBoundingClientRect();
-                const y = e.clientY - rect.top;
-
-                const newNode = {
-                  id: id,
-                  type: "output",
-                  leftPercent: 100,
-                  topPercent: (y / rect.height) * 100,
-                  onMainCanvas: true,
-                  value: false,
-                } as OutputType;
-
-                setNodes((nodes) => ({ ...nodes, [id]: newNode }));
-              }}
-            />
-          )}
-
-          <div
-            className={
-              "h-full w-[20vw] bg-green-800 flex flex-col items-center p-2 space-y-4 overflow-auto"
-            }
-          >
-            {reactChips}
-          </div>
         </div>
-
-        <button
-          type="button"
-          className={
-            "absolute bottom-4 left-4 p-2 bg-blue-500 text-white rounded-md uppercase"
-          }
-          onClick={() => {
-            const name = prompt("Chip name");
-            const id = Math.random().toString();
-            // set all nodes to not be on main canvas
-            const nodeCopy = JSON.parse(JSON.stringify(nodes));
-            for (const id in nodeCopy) {
-              nodeCopy[id].onMainCanvas = false;
-            }
-
-            // if no name, don't save
-            if (!name) return;
-
-            const chip: ChipType = {
-              id: id,
-              type: "chip",
-              nodes: { ...nodeCopy },
-              name: name,
-              inputs: Object.values(nodes)
-                .filter((node) => node.type === "input" && node.onMainCanvas)
-                .map((node) => node.id),
-              outputs: Object.values(nodes)
-                .filter((node) => node.type === "output" && node.onMainCanvas)
-                .map((node) => node.id),
-              onMainCanvas: false,
-              leftPercent: 0,
-              topPercent: 0,
-              value: false,
-            };
-            setChips({ ...chips, [id]: chip });
-            setNodes({});
-          }}
-        >
-          Save chip
-        </button>
-        <button
-          type="button"
-          className={
-            "absolute bottom-4 left-32 p-2 bg-red-700 text-white rounded-md uppercase"
-          }
-          onClick={() => {
-            setNodes({});
-          }}
-        >
-          Clear
-        </button>
-      </dragContext.Provider>
+      </canvasContext.Provider>
     </nodeContext.Provider>
-    );
+  );
 }
 
 export default App;

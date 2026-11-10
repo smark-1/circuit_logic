@@ -17,3 +17,18 @@
     border-color: var(--color-gray-200, currentColor);
   }
 }
+
+/*
+  Keep destructive controls out of the way on hover-capable devices, but
+  leave them visible on touch screens where there is no hover state.
+*/
+@media (hover: hover) and (pointer: fine) {
+  .delete-reveal {
+    opacity: 0;
+  }
+
+  .group:hover .delete-reveal,
+  .group:focus-within .delete-reveal {
+    opacity: 1;
+  }
+}

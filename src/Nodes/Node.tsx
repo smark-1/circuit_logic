@@ -8,7 +8,6 @@ import Not from "../Gates/Not.tsx";
 export default function Node(props: {
   node: NodeType;
   isChipIO?: boolean;
-  handleTriggerChange?: (node: NodeType) => void;
   handleDelete?: (nodeId: string) => void;
 }) {
   let element = <p>el</p>;
@@ -17,13 +16,17 @@ export default function Node(props: {
       element = (
         <InputNode
           node={props.node}
-          isChipInput={props.isChipIO}
-          handleTriggerChange={props.handleTriggerChange}
+          pinRole={props.isChipIO ? "sink" : "source"}
         />
       );
       break;
     case "output":
-      element = <OutputNode node={props.node} isChipOutput={props.isChipIO} />;
+      element = (
+        <OutputNode
+          node={props.node}
+          pinRole={props.isChipIO ? "source" : "sink"}
+        />
+      );
       break;
 
     case "connection":
@@ -38,28 +41,38 @@ export default function Node(props: {
   }
 
   if (props.node.type === "connection") {
-    return (
-      <div>
-        {element}
-      </div>
-    );
+    return <div>{element}</div>;
   }
+
+  const transform = props.isChipIO
+    ? "translate(-50%,-50%)"
+    : props.node.type === "input"
+      ? "translate(0,-50%)"
+      : props.node.type === "output"
+        ? "translate(-100%,-50%)"
+        : "translate(-50%,-50%)";
+
   return (
     <div
-      className={"absolute"}
+      className={"group absolute"}
       style={{
         left: `${props.node.leftPercent}%`,
         top: `${props.node.topPercent}%`,
-        transform: "translate(-50%,-50%)",
+        transform,
       }}
     >
       {element}
       {!props.isChipIO && props.handleDelete && (
         <button
           type="button"
-          className={`opacity-0 hover:opacity-100 absolute -top-2 ${props.node.type === 'output' ? '-left-2' : '-right-2'} w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-500 shadow-md hover:shadow-lg z-10`}
-          // @ts-ignore
-          onClick={() => props.handleDelete(props.node.id)}
+          data-delete
+          className={`delete-reveal absolute -top-2 ${
+            props.node.type === "output" ? "-left-2" : "-right-2"
+          } z-10 flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-sm font-bold text-white opacity-70 shadow-md transition hover:bg-red-600`}
+          onClick={(event) => {
+            event.stopPropagation();
+            props.handleDelete?.(props.node.id);
+          }}
           title="Delete node"
         >
           ×
