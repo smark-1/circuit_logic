@@ -1,7 +1,9 @@
 export type NodeID = string;
 
+export type DisplayFormat = 'decimal' | 'hex' | 'binary';
+
 export type NodeBaseType = {
-    type: 'input' | 'output' | "connection" | "chip" | "not";
+    type: 'input' | 'output' | "connection" | "chip" | "not" | "display";
     id: NodeID;
     leftPercent: number;
     topPercent: number;
@@ -35,7 +37,20 @@ export interface NotType extends NodeBaseType {
     type: 'not';
 }
 
-export type NodeType = InputType | OutputType | ConnectionType | ChipType | NotType;
+export interface DisplayType extends NodeBaseType {
+    type: 'display';
+    format: DisplayFormat;
+    /** Number of character positions on the LCD. */
+    digits: number;
+    /** Whether the carry/overflow output pin is exposed. */
+    showCarry: boolean;
+    /** Binary data pins, least-significant bit first. */
+    inputs: NodeID[];
+    /** Carry/overflow output pin, if enabled. */
+    outputs: NodeID[];
+}
+
+export type NodeType = InputType | OutputType | ConnectionType | ChipType | NotType | DisplayType;
 
 export type NodesMap = { [key: string]: NodeType };
 

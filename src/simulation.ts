@@ -1,5 +1,6 @@
 import { OFF_CANVAS_CONNECTION_DELAY_MS } from "./constants.ts";
 import { connectionDurationMs } from "./geometry.ts";
+import { syncDisplayCarry } from "./display.ts";
 import { outputValue } from "./runner.ts";
 import type { ConnectionType, NodeID, NodesMap, NodeType } from "./types.ts";
 import { getNodes } from "./utils.ts";
@@ -85,12 +86,18 @@ export function createSimulation(options: SimulationOptions): Simulation {
                 return;
             }
 
-            const next = {
-                ...current,
-                [connection.to]: {...target, value: valueAtTarget} as NodeType,
-            };
-            options.applyNodes(next);
-            emitFrom(next, connection.to);
+            const synced = syncDisplayCarry(
+                {
+                    ...current,
+                    [connection.to]: {...target, value: valueAtTarget} as NodeType,
+                },
+                [connection.to],
+            );
+            options.applyNodes(synced.nodes);
+            emitFrom(synced.nodes, connection.to);
+            for (const carryId of synced.carryIds) {
+                emitFrom(options.getNodes(), carryId);
+            }
         }, delay);
 
         timers.set(connection.id, timer);

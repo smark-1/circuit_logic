@@ -1,4 +1,14 @@
-import { GATE_SIZE, MAX_CONNECTION_DELAY_MS, MIN_CONNECTION_DELAY_MS, PIN_HIT_SIZE } from "./constants.ts";
+import {
+    DISPLAY_MAX_BITS,
+    DISPLAY_MIN_BITS,
+    DISPLAY_PIN_COLUMN_LEFT,
+    DISPLAY_PIN_GAP,
+    DISPLAY_MIN_HEIGHT,
+    GATE_SIZE,
+    MAX_CONNECTION_DELAY_MS,
+    MIN_CONNECTION_DELAY_MS,
+    PIN_HIT_SIZE,
+} from "./constants.ts";
 import type { NodeType } from "./types.ts";
 
 export function clamp(value: number, min: number, max: number): number {
@@ -70,4 +80,36 @@ export function connectionDurationMs(
     const length = Math.hypot(toX - fromX, toY - fromY);
 
     return clamp(length, MIN_CONNECTION_DELAY_MS, MAX_CONNECTION_DELAY_MS);
+}
+
+export function displayBitCount(bits: number): number {
+    return Math.round(clamp(bits, DISPLAY_MIN_BITS, DISPLAY_MAX_BITS));
+}
+
+function displayColumns(bits: number): number {
+    return displayBitCount(bits) > 6 ? 2 : 1;
+}
+
+export function displayRows(bits: number): number {
+    return Math.ceil(displayBitCount(bits) / displayColumns(bits));
+}
+
+/** Height in pixels of a display with the given number of input bits. */
+export function displayHeightPx(bits: number): number {
+    return Math.max(DISPLAY_MIN_HEIGHT, displayRows(bits) * DISPLAY_PIN_GAP + 56);
+}
+
+/**
+ * Where an input pin sits inside its display, as percentages of the display
+ * box. Bit 0 is the bottom pin of the first column, and higher columns sit
+ * just outside the left edge so a wide bus stays compact.
+ */
+export function displayInputPinPosition(bit: number, bits: number): { leftPercent: number; topPercent: number } {
+    const rows = displayRows(bits);
+    const column = Math.floor(bit / rows);
+    const row = bit % rows;
+    return {
+        leftPercent: column === 0 ? 0 : DISPLAY_PIN_COLUMN_LEFT,
+        topPercent: ((rows - row) / (rows + 1)) * 100,
+    };
 }

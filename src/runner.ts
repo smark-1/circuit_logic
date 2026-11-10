@@ -1,5 +1,6 @@
 import type { ConnectionType, NodeID, NodeType, NodesMap } from "./types.ts";
 import { GetAllIds, createId } from "./utils.ts";
+import { syncDisplayCarry } from "./display.ts";
 
 const MIN_PROPAGATION_STEPS = 100;
 const STEPS_PER_NODE = 8;
@@ -25,7 +26,7 @@ export function outputValue(node: NodeType): boolean {
  * oscillating forever.
  */
 export function propagate(nodes: NodesMap, startIds: NodeID[]): NodesMap {
-    const next: NodesMap = {...nodes};
+    let next: NodesMap = {...nodes};
     const queue: NodeID[] = [...startIds];
     const maxSteps = Math.max(
         MIN_PROPAGATION_STEPS,
@@ -38,6 +39,13 @@ export function propagate(nodes: NodesMap, startIds: NodeID[]): NodesMap {
         const id = queue.shift();
         if (id === undefined) {
             break;
+        }
+
+        // A display input pin changing also refreshes that display's carry pin.
+        const synced = syncDisplayCarry(next, [id]);
+        if (synced.nodes !== next) {
+            next = synced.nodes;
+            queue.push(...synced.carryIds);
         }
 
         const node = next[id];
@@ -208,6 +216,11 @@ export function deleteNode(nodes: NodesMap, id: NodeID): NodesMap {
         for (const internalId of GetAllIds(node.nodes)) {
             removed.add(internalId);
         }
+        for (const ioId of [...node.inputs, ...node.outputs]) {
+            removed.add(ioId);
+        }
+    }
+    if (node.type === "display") {
         for (const ioId of [...node.inputs, ...node.outputs]) {
             removed.add(ioId);
         }

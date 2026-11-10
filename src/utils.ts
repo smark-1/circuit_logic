@@ -1,5 +1,6 @@
-import {ChipType, NodeID, NodeType, NodesMap} from "./types.ts";
-import {GATE_SIZE} from "./constants.ts";
+import {ChipType, DisplayType, NodeID, NodeType, NodesMap} from "./types.ts";
+import {DISPLAY_WIDTH, GATE_SIZE} from "./constants.ts";
+import {displayHeightPx} from "./geometry.ts";
 
 export function createId(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -23,6 +24,20 @@ export function getNodes(nodes: NodesMap, canvasWidth: number, canvasHeight: num
                     topPercent: node.topPercent - chipPercentHeight / 2 + IOnode.topPercent * chipPercentHeight / 100
                 }
             })
+    })
+
+    const displayPercentWidth = canvasWidth > 0 ? DISPLAY_WIDTH / canvasWidth * 100 : 0
+    Object.values(nodesList).filter(node => node.type === "display").forEach((display: DisplayType) => {
+        const displayPercentHeight = canvasHeight > 0 ? displayHeightPx(display.inputs.length) / canvasHeight * 100 : 0
+        for (const pinId of [...display.inputs, ...display.outputs]) {
+            const pin = nodesList[pinId]
+            if (!pin) continue
+            nodesList[pinId] = {
+                ...pin,
+                leftPercent: display.leftPercent - displayPercentWidth / 2 + pin.leftPercent * displayPercentWidth / 100,
+                topPercent: display.topPercent - displayPercentHeight / 2 + pin.topPercent * displayPercentHeight / 100,
+            }
+        }
     })
     return nodesList
 }
@@ -74,6 +89,13 @@ export function remapChip(chip: ChipType): ChipType {
                     inputs: node.inputs.map(mapId),
                     outputs: node.outputs.map(mapId),
                     nodes: remapNodes(node.nodes),
+                }
+            } else if (node.type === "display") {
+                next[newId] = {
+                    ...node,
+                    id: newId,
+                    inputs: node.inputs.map(mapId),
+                    outputs: node.outputs.map(mapId),
                 }
             } else {
                 next[newId] = {...node, id: newId}
