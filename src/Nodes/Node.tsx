@@ -4,11 +4,14 @@ import OutputNode from "./OutputNode.tsx";
 import ConnectionNode from "./ConnectionNode.tsx";
 import Chip from "../Gates/Chip.tsx";
 import Not from "../Gates/Not.tsx";
+import Display from "../Gates/Display.tsx";
 
 export default function Node(props: {
   node: NodeType;
   isChipIO?: boolean;
   handleDelete?: (nodeId: string) => void;
+  handleConfigure?: (nodeId: string) => void;
+  label?: string;
 }) {
   let element = <p>el</p>;
   switch (props.node.type) {
@@ -17,6 +20,7 @@ export default function Node(props: {
         <InputNode
           node={props.node}
           pinRole={props.isChipIO ? "sink" : "source"}
+          label={props.label}
         />
       );
       break;
@@ -25,6 +29,7 @@ export default function Node(props: {
         <OutputNode
           node={props.node}
           pinRole={props.isChipIO ? "source" : "sink"}
+          label={props.label}
         />
       );
       break;
@@ -38,6 +43,15 @@ export default function Node(props: {
       break;
     case "not":
       element = <Not not={props.node} />;
+      break;
+    case "display":
+      element = (
+        <Display
+          display={props.node}
+          onConfigure={props.handleConfigure}
+        />
+      );
+      break;
   }
 
   if (props.node.type === "connection") {

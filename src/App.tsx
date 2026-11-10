@@ -23,12 +23,20 @@ import Chip from "./Gates/Chip.tsx";
 import Not from "./Gates/Not.tsx";
 import defaultChips from "./defaultChips.json";
 import {
+  DISPLAY_WIDTH,
   DRAG_THRESHOLD_PX,
   EDGE_ZONE_PX,
   GATE_SIZE,
   PIN_HIT_SIZE,
 } from "./constants.ts";
-import { clamp, clampPercentFromPx } from "./geometry.ts";
+import { clamp, clampPercentFromPx, displayHeightPx } from "./geometry.ts";
+import {
+  DEFAULT_DISPLAY_CONFIG,
+  createDisplayNode,
+  rebuildDisplay,
+  type DisplayConfig,
+} from "./display.ts";
+import { DisplayConfigDialog } from "./dialogs.tsx";
 
 type Point = { x: number; y: number };
 type PinRole = "source" | "sink";
@@ -51,8 +59,24 @@ type DragSession =
   | (SessionBase & { kind: "canvas" })
   | (SessionBase & { kind: "palette"; chipId: string });
 
+type DisplayDialogState = {
+  id: NodeID | null;
+  config: DisplayConfig;
+  point: Point | null;
+};
+
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function nodeSize(node: NodeType): { width: number; height: number } {
+  if (node.type === "display") {
+    return {
+      width: DISPLAY_WIDTH,
+      height: displayHeightPx(node.inputs.length),
+    };
+  }
+  return { width: GATE_SIZE, height: GATE_SIZE };
 }
 
 function findPinAt(
@@ -86,6 +110,7 @@ function App() {
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [connectPreview, setConnectPreview] = useState<{ from: Point; to: Point } | null>(null);
   const [palettePreview, setPalettePreview] = useState<{ chipId: string; client: Point } | null>(null);
+  const [displayDialog, setDisplayDialog] = useState<DisplayDialogState | null>(null);
 
   const nodesRef = useRef(nodes);
   const chipsRef = useRef(chips);
@@ -231,6 +256,70 @@ function App() {
     simulation.primeConnections(chipNodes);
   };
 
+  const addDisplayAt = (config: DisplayConfig, point: Point) => {
+    const rect = getCanvasRect();
+    if (!rect) return;
+
+    const leftPercent = clampPercentFromPx(point.x, DISPLAY_WIDTH, rect.width);
+    const topPercent = clampPercentFromPx(
+      point.y,
+      displayHeightPx(config.bits),
+      rect.height,
+    );
+    const { display, pins } = createDisplayNode(
+      config,
+      leftPercent,
+      topPercent,
+    );
+    applyNodes(settle({ ...nodesRef.current, ...pins, [display.id]: display }));
+  };
+
+  const openDisplayDialog = (point: Point | null, id: NodeID | null = null) => {
+    if (id) {
+      const node = nodesRef.current[id];
+      if (node?.type !== "display") return;
+      setDisplayDialog({
+        id,
+        point: null,
+        config: {
+          format: node.format,
+          digits: node.digits,
+          bits: node.inputs.length,
+          showCarry: node.showCarry,
+        },
+      });
+      return;
+    }
+    setDisplayDialog({ id: null, point, config: DEFAULT_DISPLAY_CONFIG });
+  };
+
+  const handleConfigureDisplay = (nodeId: NodeID) => {
+    openDisplayDialog(null, nodeId);
+  };
+
+  const confirmDisplayDialog = (config: DisplayConfig) => {
+    const dialog = displayDialog;
+    setDisplayDialog(null);
+    if (!dialog) return;
+
+    if (dialog.id) {
+      const current = nodesRef.current;
+      const display = current[dialog.id];
+      if (display?.type !== "display") return;
+
+      const rebuilt = rebuildDisplay(current, display, config);
+      simulation.forgetConnections(rebuilt.removedConnections);
+      const settled = settle(rebuilt.nodes);
+      applyNodes(settled);
+      simulation.primeArrivals(settled);
+      return;
+    }
+
+    if (dialog.point) {
+      addDisplayAt(config, dialog.point);
+    }
+  };
+
   /** Add a connection from `from` to `to`, or report that it was invalid. */
   const connectFrom = (base: NodesMap, from: NodeID, to: NodeID): boolean => {
     const next = createConnection(base, from, to);
@@ -317,18 +406,19 @@ function App() {
       }
 
       if (session.kind === "move") {
-        const centerX =
-          rect.width <= GATE_SIZE
-            ? rect.width / 2
-            : clamp(local.x - session.offset.x, GATE_SIZE / 2, rect.width - GATE_SIZE / 2);
-        const centerY =
-          rect.height <= GATE_SIZE
-            ? rect.height / 2
-            : clamp(local.y - session.offset.y, GATE_SIZE / 2, rect.height - GATE_SIZE / 2);
-
         const current = nodesRef.current;
         const node = current[session.id];
         if (!node) return;
+
+        const size = nodeSize(node);
+        const centerX =
+          rect.width <= size.width
+            ? rect.width / 2
+            : clamp(local.x - session.offset.x, size.width / 2, rect.width - size.width / 2);
+        const centerY =
+          rect.height <= size.height
+            ? rect.height / 2
+            : clamp(local.y - session.offset.y, size.height / 2, rect.height - size.height / 2);
 
         applyNodes({
           ...current,
@@ -429,7 +519,15 @@ function App() {
           addNodeAt(local);
         }
       } else if (session.kind === "palette") {
-        if (!session.moved) {
+        if (session.chipId === "lcd") {
+          if (!session.moved) {
+            if (rect) {
+              openDisplayDialog({ x: rect.width / 2, y: rect.height / 2 });
+            }
+          } else if (insideCanvas && local) {
+            openDisplayDialog(local);
+          }
+        } else if (!session.moved) {
           if (rect) {
             addChipAt(session.chipId, { x: rect.width / 2, y: rect.height / 2 });
           }
@@ -600,9 +698,15 @@ function App() {
       <div
         key={node.id}
         data-node-id={node.id}
-        data-movable={["not", "chip"].includes(node.type) ? "true" : undefined}
+        data-movable={
+          ["not", "chip", "display"].includes(node.type) ? "true" : undefined
+        }
       >
-        <Node node={node} handleDelete={handleDelete} />
+        <Node
+          node={node}
+          handleDelete={handleDelete}
+          handleConfigure={handleConfigureDisplay}
+        />
       </div>
     ));
 
@@ -637,6 +741,30 @@ function App() {
             value: false,
           }}
         />
+      </div>
+    </div>,
+    <div
+      key={"lcd"}
+      className={"shrink-0 cursor-grab touch-pan-x select-none"}
+      onPointerDown={(event) => startPaletteDrag(event, "lcd")}
+      onContextMenu={(event) => event.preventDefault()}
+      title={"LCD display"}
+    >
+      <div
+        className={
+          "pointer-events-none flex h-32 w-32 flex-col items-center justify-center rounded-lg border-4 border-slate-500 bg-slate-700 shadow-lg"
+        }
+      >
+        <div
+          className={
+            "flex h-16 w-24 items-center justify-center rounded-md border-2 border-cyan-950 bg-[#07140f] font-mono text-lg tracking-widest text-emerald-300 shadow-inner"
+          }
+        >
+          000
+        </div>
+        <span className={"mt-1 font-mono text-[9px] uppercase text-slate-300"}>
+          LCD
+        </span>
       </div>
     </div>,
   );
@@ -728,9 +856,22 @@ function App() {
                 className={"flex items-center justify-center rounded-lg bg-gray-600/90 p-4 text-center text-xl text-gray-50"}
                 style={{ width: GATE_SIZE, height: GATE_SIZE }}
               >
-                {palettePreview.chipId === "not" ? "NOT" : previewChip?.name ?? ""}
+                {palettePreview.chipId === "not"
+                  ? "NOT"
+                  : palettePreview.chipId === "lcd"
+                    ? "000"
+                    : previewChip?.name ?? ""}
               </div>
             </div>
+          )}
+
+          {displayDialog && (
+            <DisplayConfigDialog
+              title={displayDialog.id ? "Edit display" : "Add display"}
+              initial={displayDialog.config}
+              onCancel={() => setDisplayDialog(null)}
+              onSave={confirmDisplayDialog}
+            />
           )}
         </div>
       </canvasContext.Provider>

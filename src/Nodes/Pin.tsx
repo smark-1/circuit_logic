@@ -14,18 +14,24 @@ export default function Pin(props: {
   onClass: string;
   offClass: string;
   className?: string;
+  label?: string;
 }) {
   return (
     <div
       data-node-id={props.nodeId}
       data-pin-role={props.role}
-      className={`flex touch-none items-center justify-center ${props.className ?? ""}`}
+      className={`relative flex touch-none items-center justify-center ${props.className ?? ""}`}
       style={{ width: PIN_HIT_SIZE, height: PIN_HIT_SIZE }}
     >
       <div
         className={`${props.on ? props.onClass : props.offClass} pointer-events-none rounded-full border-2 duration-100`}
         style={{ width: PIN_SIZE, height: PIN_SIZE }}
       />
+      {props.label && (
+        <span className={"pointer-events-none absolute left-full ml-0.5 text-[8px] font-mono text-cyan-200/80"}>
+          {props.label}
+        </span>
+      )}
     </div>
   );
 }
