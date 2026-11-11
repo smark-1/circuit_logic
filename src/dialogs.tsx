@@ -66,6 +66,32 @@ const primaryButtonClass =
 const secondaryButtonClass =
     "rounded-md bg-slate-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-500";
 
+export function ConfirmDialog(props: {
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onCancel: () => void;
+    onConfirm: () => void;
+}) {
+    return (
+        <Dialog title={props.title} onClose={props.onCancel}>
+            <p className={"text-sm text-slate-300"}>{props.message}</p>
+            <div className={"mt-4 flex justify-end gap-2"}>
+                <button type={"button"} className={secondaryButtonClass} onClick={props.onCancel}>
+                    Cancel
+                </button>
+                <button
+                    type={"button"}
+                    className={"rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-red-500"}
+                    onClick={props.onConfirm}
+                >
+                    {props.confirmLabel}
+                </button>
+            </div>
+        </Dialog>
+    );
+}
+
 export function SaveChipDialog(props: {
     onCancel: () => void;
     onSave: (name: string) => void;
