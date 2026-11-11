@@ -56,7 +56,12 @@ export function createInitialWorkspace(chips: ChipMap): Workspace {
                 nodes: {},
             },
         },
-        chips,
+        chips: Object.fromEntries(
+            Object.entries(chips).map(([chipId, chip]) => [
+                chipId,
+                {...chip, builtIn: true},
+            ]),
+        ),
         tabs: [{kind: "board", id}],
         activeIndex: 0,
     };

@@ -33,6 +33,8 @@ export interface ChipType extends NodeBaseType {
     name: string;
     /** Palette chip definition this placed instance came from, if any. */
     templateId?: NodeID;
+    /** Built-in chips ship with the app and can only be copied, not edited. */
+    builtIn?: boolean;
 }
 
 export interface NotType extends NodeBaseType {

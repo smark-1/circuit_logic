@@ -7,7 +7,7 @@ import type {
     NodesMap,
     NodeType,
 } from "./types.ts";
-import { GetAllIds, createId } from "./utils.ts";
+import { GetAllIds, createId, remapChip } from "./utils.ts";
 
 /**
  * A chip editor works on a live copy of the chip's internals. Every node is
@@ -88,6 +88,25 @@ export function chipTemplateFromNodes(
         topPercent: 0,
         onMainCanvas: false,
         value: false,
+    };
+}
+
+/**
+ * Create an editable palette chip from an existing definition. Built-in chips
+ * are read-only, so this is how a user starts editing one without mutating
+ * the original. Every internal ID is regenerated so the copy is fully
+ * independent.
+ */
+export function copyChipTemplate(
+    chip: ChipType,
+    name: string,
+    id: NodeID,
+): ChipType {
+    return {
+        ...remapChip(chip),
+        id,
+        name,
+        builtIn: false,
     };
 }
 

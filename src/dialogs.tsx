@@ -94,11 +94,14 @@ export function ConfirmDialog(props: {
 export function SaveChipDialog(props: {
     onCancel: () => void;
     onSave: (name: string) => void;
+    title?: string;
+    initialName?: string;
+    submitLabel?: string;
 }) {
-    const [name, setName] = useState("");
+    const [name, setName] = useState(props.initialName ?? "");
 
     return (
-        <Dialog title={"Save chip"} onClose={props.onCancel}>
+        <Dialog title={props.title ?? "Save chip"} onClose={props.onCancel}>
             <form
                 onSubmit={(event) => {
                     event.preventDefault();
@@ -124,7 +127,7 @@ export function SaveChipDialog(props: {
                         Cancel
                     </button>
                     <button type={"submit"} className={primaryButtonClass} disabled={!name.trim()}>
-                        Save chip
+                        {props.submitLabel ?? "Save chip"}
                     </button>
                 </div>
             </form>

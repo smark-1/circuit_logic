@@ -48,6 +48,7 @@ import {
   applyChipTemplate,
   chipTemplateFromNodes,
   cloneNodesForEditing,
+  copyChipTemplate,
 } from "./chipEditing.ts";
 import {
   activeNodes,
@@ -133,6 +134,7 @@ function App() {
   const [connectPreview, setConnectPreview] = useState<{ from: Point; to: Point } | null>(null);
   const [palettePreview, setPalettePreview] = useState<{ chipId: string; client: Point } | null>(null);
   const [saveChipOpen, setSaveChipOpen] = useState(false);
+  const [copyChipId, setCopyChipId] = useState<NodeID | null>(null);
   const [displayDialog, setDisplayDialog] = useState<DisplayDialogState | null>(null);
   const [closeTabIndex, setCloseTabIndex] = useState<number | null>(null);
 
@@ -845,7 +847,7 @@ function App() {
     }
 
     const chip = current.chips[chipId];
-    if (!chip) return;
+    if (!chip || chip.builtIn) return;
 
     cleanupRef.current?.();
     simulation.clear();
@@ -878,13 +880,29 @@ function App() {
     applyNodes({});
   };
 
+  const saveChipCopy = (name: string) => {
+    if (!name.trim() || !copyChipId) return;
+
+    const base = workspaceRef.current.chips[copyChipId];
+    if (!base) return;
+
+    const id = createId();
+    const copy = copyChipTemplate(base, name.trim(), id);
+    setCopyChipId(null);
+    setWorkspace((ws) => ({
+      ...ws,
+      chips: {...ws.chips, [id]: copy},
+    }));
+    openChipEditor(id);
+  };
+
   const saveChipChanges = () => {
     const current = workspaceRef.current;
     const tab = current.tabs[current.activeIndex];
     if (!tab || tab.kind !== "chip") return;
 
     const base = current.chips[tab.chipId];
-    if (!base) return;
+    if (!base || base.builtIn) return;
 
     const template = chipTemplateFromNodes(
       base.name,
@@ -956,14 +974,18 @@ function App() {
         className={
           "delete-reveal absolute -right-1 -top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white shadow-md transition hover:bg-sky-500"
         }
-        title={"Edit chip"}
+        title={chip.builtIn ? "Save as copy" : "Edit chip"}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
-          openChipEditor(chip.id);
+          if (chip.builtIn) {
+            setCopyChipId(chip.id);
+          } else {
+            openChipEditor(chip.id);
+          }
         }}
       >
-        ✎
+        {chip.builtIn ? "⧉" : "✎"}
       </button>
     </div>
   ));
@@ -1020,6 +1042,7 @@ function App() {
     [canvasSize.width, canvasSize.height],
   );
   const previewChip = palettePreview ? chips[palettePreview.chipId] : undefined;
+  const copyChip = copyChipId ? chips[copyChipId] : undefined;
 
   return (
     <nodeContext.Provider value={nodeContextValue}>
@@ -1186,6 +1209,16 @@ function App() {
                     : previewChip?.name ?? ""}
               </div>
             </div>
+          )}
+
+          {copyChip && (
+            <SaveChipDialog
+              title={"Save chip as copy"}
+              initialName={`${copyChip.name} copy`}
+              submitLabel={"Save copy"}
+              onCancel={() => setCopyChipId(null)}
+              onSave={saveChipCopy}
+            />
           )}
 
           {saveChipOpen && activeTab?.kind === "board" && (
