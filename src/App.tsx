@@ -36,7 +36,7 @@ import {
   rebuildDisplay,
   type DisplayConfig,
 } from "./display.ts";
-import { DisplayConfigDialog } from "./dialogs.tsx";
+import { DisplayConfigDialog, SaveChipDialog } from "./dialogs.tsx";
 
 type Point = { x: number; y: number };
 type PinRole = "source" | "sink";
@@ -110,6 +110,7 @@ function App() {
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [connectPreview, setConnectPreview] = useState<{ from: Point; to: Point } | null>(null);
   const [palettePreview, setPalettePreview] = useState<{ chipId: string; client: Point } | null>(null);
+  const [saveChipOpen, setSaveChipOpen] = useState(false);
   const [displayDialog, setDisplayDialog] = useState<DisplayDialogState | null>(null);
 
   const nodesRef = useRef(nodes);
@@ -654,9 +655,8 @@ function App() {
     });
   };
 
-  const saveChip = () => {
-    const name = prompt("Chip name");
-    if (!name) return;
+  const saveChip = (name: string) => {
+    if (!name.trim()) return;
 
     const current = nodesRef.current;
     const nodeCopy: NodesMap = {};
@@ -788,7 +788,7 @@ function App() {
               <button
                 type="button"
                 className={"rounded-md bg-blue-500 p-2 text-xs text-white uppercase md:text-sm"}
-                onClick={saveChip}
+                onClick={() => setSaveChipOpen(true)}
               >
                 Save chip
               </button>
@@ -863,6 +863,16 @@ function App() {
                     : previewChip?.name ?? ""}
               </div>
             </div>
+          )}
+
+          {saveChipOpen && (
+            <SaveChipDialog
+              onCancel={() => setSaveChipOpen(false)}
+              onSave={(name) => {
+                setSaveChipOpen(false);
+                saveChip(name);
+              }}
+            />
           )}
 
           {displayDialog && (
