@@ -31,6 +31,8 @@ export interface ChipType extends NodeBaseType {
     outputs: NodeID[];
     nodes: { [key: string]: NodeType };
     name: string;
+    /** Palette chip definition this placed instance came from, if any. */
+    templateId?: NodeID;
 }
 
 export interface NotType extends NodeBaseType {
@@ -55,3 +57,11 @@ export type NodeType = InputType | OutputType | ConnectionType | ChipType | NotT
 export type NodesMap = { [key: string]: NodeType };
 
 export type ChipMap = { [key: string]: ChipType };
+
+export type BoardType = {
+    id: NodeID;
+    name: string;
+    nodes: NodesMap;
+};
+
+export type BoardMap = { [key: string]: BoardType };
