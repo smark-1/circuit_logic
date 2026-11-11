@@ -1,5 +1,6 @@
 import {
     DISPLAY_MAX_BITS,
+    DISPLAY_MAX_PIN_ROWS,
     DISPLAY_MIN_BITS,
     DISPLAY_PIN_COLUMN_LEFT,
     DISPLAY_PIN_GAP,
@@ -87,29 +88,29 @@ export function displayBitCount(bits: number): number {
 }
 
 function displayColumns(bits: number): number {
-    return displayBitCount(bits) > 6 ? 2 : 1;
+    return Math.ceil(displayBitCount(bits) / DISPLAY_MAX_PIN_ROWS);
 }
 
 export function displayRows(bits: number): number {
     return Math.ceil(displayBitCount(bits) / displayColumns(bits));
 }
 
-/** Height in pixels of a display with the given number of input bits. */
+/** Height in pixels of a display with the given number of input pins. */
 export function displayHeightPx(bits: number): number {
     return Math.max(DISPLAY_MIN_HEIGHT, displayRows(bits) * DISPLAY_PIN_GAP + 56);
 }
 
 /**
  * Where an input pin sits inside its display, as percentages of the display
- * box. Bit 0 is the bottom pin of the first column, and higher columns sit
+ * box. Slot 0 is the bottom pin of the first column, and higher columns sit
  * just outside the left edge so a wide bus stays compact.
  */
-export function displayInputPinPosition(bit: number, bits: number): { leftPercent: number; topPercent: number } {
+export function displayInputPinPosition(slot: number, bits: number): { leftPercent: number; topPercent: number } {
     const rows = displayRows(bits);
-    const column = Math.floor(bit / rows);
-    const row = bit % rows;
+    const column = Math.floor(slot / rows);
+    const row = slot % rows;
     return {
-        leftPercent: column === 0 ? 0 : DISPLAY_PIN_COLUMN_LEFT,
+        leftPercent: column * DISPLAY_PIN_COLUMN_LEFT,
         topPercent: ((rows - row) / (rows + 1)) * 100,
     };
 }

@@ -89,6 +89,7 @@ function cloneNodesWithMap(
                 ...node,
                 id: newId,
                 inputs: node.inputs.map(mapId),
+                signInput: node.signInput ? mapId(node.signInput) : null,
                 outputs: node.outputs.map(mapId),
             };
         } else {

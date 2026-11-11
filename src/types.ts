@@ -46,8 +46,12 @@ export interface DisplayType extends NodeBaseType {
     digits: number;
     /** Whether the carry/overflow output pin is exposed. */
     showCarry: boolean;
+    /** Whether the optional negative-sign input pin is exposed. */
+    showSign: boolean;
     /** Binary data pins, least-significant bit first. */
     inputs: NodeID[];
+    /** Negative-sign input pin, if enabled. */
+    signInput: NodeID | null;
     /** Carry/overflow output pin, if enabled. */
     outputs: NodeID[];
 }

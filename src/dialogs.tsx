@@ -1,11 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
-    DISPLAY_MAX_BITS,
     DISPLAY_MAX_DIGITS,
-    DISPLAY_MIN_BITS,
     DISPLAY_MIN_DIGITS,
 } from "./constants.ts";
 import {
+    displayDataBitCount,
     displayMaxValue,
     formatDisplayValue,
     type DisplayConfig,
@@ -141,20 +140,21 @@ export function DisplayConfigDialog(props: {
 }) {
     const [format, setFormat] = useState<DisplayFormat>(props.initial.format);
     const [digits, setDigits] = useState(props.initial.digits);
-    const [bits, setBits] = useState(props.initial.bits);
     const [showCarry, setShowCarry] = useState(props.initial.showCarry);
+    const [showSign, setShowSign] = useState(props.initial.showSign);
 
     const maxValue = formatDisplayValue(
         displayMaxValue(format, digits),
         format,
     ).padStart(digits, "0");
+    const dataBits = displayDataBitCount(format, digits);
 
     return (
         <Dialog title={props.title} onClose={props.onCancel}>
             <form
                 onSubmit={(event) => {
                     event.preventDefault();
-                    props.onSave({ format, digits, bits, showCarry });
+                    props.onSave({ format, digits, showCarry, showSign });
                 }}
             >
                 <div className={"grid gap-3"}>
@@ -184,33 +184,39 @@ export function DisplayConfigDialog(props: {
                                 ))}
                             </select>
                         </label>
-                        <label className={"grid gap-1 text-xs uppercase tracking-wide text-slate-400"}>
-                            Input bits
-                            <select
-                                className={inputClass}
-                                value={bits}
-                                onChange={(event) => setBits(Number(event.target.value))}
-                            >
-                                {choices(DISPLAY_MIN_BITS, DISPLAY_MAX_BITS).map((value) => (
-                                    <option key={value} value={value}>{value}</option>
-                                ))}
-                            </select>
+                        <div className={"grid gap-1 text-xs uppercase tracking-wide text-slate-400"}>
+                            Input pins
+                            <div className={"flex h-[34px] items-center rounded-md border border-slate-600 bg-slate-900/70 px-2 text-sm normal-case text-slate-300"}>
+                                {dataBits} data{showSign ? " + sign" : ""}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={"grid gap-2"}>
+                        <label className={"flex items-center gap-2 text-sm text-slate-200"}>
+                            <input
+                                type={"checkbox"}
+                                checked={showCarry}
+                                onChange={(event) => setShowCarry(event.target.checked)}
+                                className={"h-4 w-4 accent-cyan-500"}
+                            />
+                            Carry / overflow output
+                        </label>
+                        <label className={"flex items-center gap-2 text-sm text-slate-200"}>
+                            <input
+                                type={"checkbox"}
+                                checked={showSign}
+                                onChange={(event) => setShowSign(event.target.checked)}
+                                className={"h-4 w-4 accent-cyan-500"}
+                            />
+                            Negative sign input (±)
                         </label>
                     </div>
 
-                    <label className={"flex items-center gap-2 text-sm text-slate-200"}>
-                        <input
-                            type={"checkbox"}
-                            checked={showCarry}
-                            onChange={(event) => setShowCarry(event.target.checked)}
-                            className={"h-4 w-4 accent-cyan-500"}
-                        />
-                        Carry / overflow output
-                    </label>
-
                     <p className={"rounded-md bg-slate-900/70 px-2 py-1.5 text-xs text-slate-400"}>
                         Shows up to <span className={"font-mono text-cyan-300"}>{maxValue}</span>.
-                        The carry pin is high when a larger value needs another display.
+                        Data pins are added automatically so every value fits. The sign pin
+                        shows the same number as negative while it is high.
                     </p>
                 </div>
 

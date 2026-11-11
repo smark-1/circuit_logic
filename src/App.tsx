@@ -34,6 +34,8 @@ import { clamp, clampPercentFromPx, displayHeightPx } from "./geometry.ts";
 import {
   DEFAULT_DISPLAY_CONFIG,
   createDisplayNode,
+  displayConfigPinCount,
+  displayPinCount,
   rebuildDisplay,
   type DisplayConfig,
 } from "./display.ts";
@@ -91,7 +93,7 @@ function nodeSize(node: NodeType): { width: number; height: number } {
   if (node.type === "display") {
     return {
       width: DISPLAY_WIDTH,
-      height: displayHeightPx(node.inputs.length),
+      height: displayHeightPx(displayPinCount(node)),
     };
   }
   return { width: GATE_SIZE, height: GATE_SIZE };
@@ -325,7 +327,7 @@ function App() {
     const leftPercent = clampPercentFromPx(point.x, DISPLAY_WIDTH, rect.width);
     const topPercent = clampPercentFromPx(
       point.y,
-      displayHeightPx(config.bits),
+      displayHeightPx(displayConfigPinCount(config)),
       rect.height,
     );
     const { display, pins } = createDisplayNode(
@@ -346,8 +348,8 @@ function App() {
         config: {
           format: node.format,
           digits: node.digits,
-          bits: node.inputs.length,
           showCarry: node.showCarry,
+          showSign: Boolean(node.showSign),
         },
       });
       return;

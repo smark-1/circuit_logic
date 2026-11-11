@@ -3,7 +3,7 @@ import {
     DISPLAY_MIN_DIGITS,
     DISPLAY_WIDTH,
 } from "./constants.ts";
-import { displayBitCount, displayHeightPx, displayInputPinPosition } from "./geometry.ts";
+import { displayHeightPx, displayInputPinPosition } from "./geometry.ts";
 import { createId } from "./utils.ts";
 import type {
     DisplayFormat,
@@ -16,15 +16,15 @@ import type {
 export type DisplayConfig = {
     format: DisplayFormat;
     digits: number;
-    bits: number;
     showCarry: boolean;
+    showSign: boolean;
 };
 
 export const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
     format: "decimal",
     digits: 3,
-    bits: 8,
     showCarry: false,
+    showSign: false,
 };
 
 export const DISPLAY_FORMAT_LABELS: Record<DisplayFormat, string> = {
@@ -53,6 +53,28 @@ export function formatBase(format: DisplayFormat): number {
 /** Largest value the configured digits can represent. */
 export function displayMaxValue(format: DisplayFormat, digits: number): number {
     return formatBase(format) ** displayDigitCount(digits) - 1;
+}
+
+/**
+ * Number of data pins needed to reach every value the configured digits can
+ * show. Decimal three digits gets ten pins (0-999), hex gets four per digit,
+ * and binary gets one per digit.
+ */
+export function displayDataBitCount(format: DisplayFormat, digits: number): number {
+    const max = displayMaxValue(format, digits);
+    return Math.max(1, Math.ceil(Math.log2(max + 1)));
+}
+
+/** Total input pins for a config, including the optional negative-sign pin. */
+export function displayConfigPinCount(config: DisplayConfig): number {
+    return displayDataBitCount(config.format, config.digits) + (config.showSign ? 1 : 0);
+}
+
+/** Total input pins on an existing display, including its sign pin. */
+export function displayPinCount(
+    display: Pick<DisplayType, "inputs" | "signInput">,
+): number {
+    return display.inputs.length + (display.signInput ? 1 : 0);
 }
 
 /**
@@ -102,18 +124,22 @@ export function displayText(
         displayValue(nodes, display, fallback),
         display.format,
     );
-    return raw.padStart(displayDigitCount(display.digits), "0");
+    const text = raw.padStart(displayDigitCount(display.digits), "0");
+    const signPin = display.signInput
+        ? nodes[display.signInput] ?? fallback?.[display.signInput]
+        : undefined;
+    return signPin?.value ? `-${text}` : text;
 }
 
-export function displaySize(display: Pick<DisplayType, "inputs">) {
+export function displaySize(display: Pick<DisplayType, "inputs" | "signInput">) {
     return {
         width: DISPLAY_WIDTH,
-        height: displayHeightPx(display.inputs.length),
+        height: displayHeightPx(displayPinCount(display)),
     };
 }
 
-function makeInputPin(id: NodeID, bit: number, bits: number): NodeType {
-    const position = displayInputPinPosition(bit, bits);
+function makeInputPin(id: NodeID, slot: number, totalPins: number): NodeType {
+    const position = displayInputPinPosition(slot, totalPins);
     return {
         id,
         type: "input",
@@ -140,15 +166,21 @@ export function createDisplayNode(
     leftPercent: number,
     topPercent: number,
 ): { display: DisplayType; pins: NodesMap } {
-    const bits = displayBitCount(config.bits);
+    const bits = displayDataBitCount(config.format, config.digits);
+    const signOffset = config.showSign ? 1 : 0;
+    const totalPins = bits + signOffset;
     const id = createId();
     const inputIds = Array.from({ length: bits }, () => createId());
+    const signId = config.showSign ? createId() : null;
     const carryId = config.showCarry ? createId() : null;
 
     const pins: NodesMap = {};
     inputIds.forEach((pinId, bit) => {
-        pins[pinId] = makeInputPin(pinId, bit, bits);
+        pins[pinId] = makeInputPin(pinId, bit + signOffset, totalPins);
     });
+    if (signId) {
+        pins[signId] = makeInputPin(signId, 0, totalPins);
+    }
     if (carryId) {
         pins[carryId] = makeCarryPin(carryId);
     }
@@ -160,7 +192,9 @@ export function createDisplayNode(
             format: config.format,
             digits: displayDigitCount(config.digits),
             showCarry: config.showCarry,
+            showSign: config.showSign,
             inputs: inputIds,
+            signInput: signId,
             outputs: carryId ? [carryId] : [],
             leftPercent,
             topPercent,
@@ -180,7 +214,10 @@ export function rebuildDisplay(
     display: DisplayType,
     config: DisplayConfig,
 ): { nodes: NodesMap; display: DisplayType; removedConnections: NodeID[] } {
-    const bits = displayBitCount(config.bits);
+    const digits = displayDigitCount(config.digits);
+    const bits = displayDataBitCount(config.format, digits);
+    const signOffset = config.showSign ? 1 : 0;
+    const totalPins = bits + signOffset;
     const next: NodesMap = { ...base };
     const oldInputs = display.inputs;
     const newInputs: NodeID[] = [];
@@ -191,8 +228,19 @@ export function rebuildDisplay(
             newInputs.push(candidate);
         } else {
             const id = createId();
-            next[id] = makeInputPin(id, bit, bits);
+            next[id] = makeInputPin(id, bit + signOffset, totalPins);
             newInputs.push(id);
+        }
+    }
+
+    const oldSign = display.signInput ?? null;
+    let signId: NodeID | null = null;
+    if (config.showSign) {
+        if (oldSign && base[oldSign]?.type === "input") {
+            signId = oldSign;
+        } else {
+            signId = createId();
+            next[signId] = makeInputPin(signId, 0, totalPins);
         }
     }
 
@@ -208,13 +256,21 @@ export function rebuildDisplay(
     }
 
     newInputs.forEach((id, bit) => {
-        const position = displayInputPinPosition(bit, bits);
+        const position = displayInputPinPosition(bit + signOffset, totalPins);
         next[id] = {
             ...next[id],
             leftPercent: position.leftPercent,
             topPercent: position.topPercent,
         } as NodeType;
     });
+    if (signId) {
+        const position = displayInputPinPosition(0, totalPins);
+        next[signId] = {
+            ...next[signId],
+            leftPercent: position.leftPercent,
+            topPercent: position.topPercent,
+        } as NodeType;
+    }
     if (carryId) {
         next[carryId] = {
             ...next[carryId],
@@ -228,6 +284,9 @@ export function rebuildDisplay(
         if (!newInputs.includes(id)) {
             removedPins.add(id);
         }
+    }
+    if (oldSign && oldSign !== signId) {
+        removedPins.add(oldSign);
     }
     if (oldCarry && oldCarry !== carryId) {
         removedPins.add(oldCarry);
@@ -250,9 +309,11 @@ export function rebuildDisplay(
     const updated: DisplayType = {
         ...display,
         format: config.format,
-        digits: displayDigitCount(config.digits),
+        digits,
         showCarry: config.showCarry,
+        showSign: config.showSign,
         inputs: newInputs,
+        signInput: signId,
         outputs: carryId ? [carryId] : [],
     };
     next[display.id] = updated;
