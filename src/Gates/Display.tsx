@@ -47,7 +47,7 @@ export default function Display(props: {
   return (
     <div
       className={
-        "relative rounded-xl border-4 border-slate-500 bg-slate-700 shadow-lg"
+        "group relative rounded-xl border-4 border-slate-500 bg-slate-700 shadow-lg"
       }
       style={{ width: DISPLAY_WIDTH, height }}
     >

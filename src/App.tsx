@@ -944,7 +944,7 @@ function App() {
   const reactChips = Object.values(chips).map((chip) => (
     <div
       key={chip.id}
-      className={"relative shrink-0 cursor-grab touch-pan-x select-none"}
+      className={"group relative shrink-0 cursor-grab touch-pan-x select-none"}
       onPointerDown={(event) => startPaletteDrag(event, chip.id)}
       onContextMenu={(event) => event.preventDefault()}
     >
