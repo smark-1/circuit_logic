@@ -28,8 +28,14 @@ export function getNodes(nodes: NodesMap, canvasWidth: number, canvasHeight: num
 
     const displayPercentWidth = canvasWidth > 0 ? DISPLAY_WIDTH / canvasWidth * 100 : 0
     Object.values(nodesList).filter(node => node.type === "display").forEach((display: DisplayType) => {
-        const displayPercentHeight = canvasHeight > 0 ? displayHeightPx(display.inputs.length) / canvasHeight * 100 : 0
-        for (const pinId of [...display.inputs, ...display.outputs]) {
+        const displayPins = [
+            ...display.inputs,
+            ...(display.signInput ? [display.signInput] : []),
+            ...display.outputs,
+        ];
+        const displayInputCount = display.inputs.length + (display.signInput ? 1 : 0)
+        const displayPercentHeight = canvasHeight > 0 ? displayHeightPx(displayInputCount) / canvasHeight * 100 : 0
+        for (const pinId of displayPins) {
             const pin = nodesList[pinId]
             if (!pin) continue
             nodesList[pinId] = {
@@ -49,6 +55,12 @@ export function GetAllIds(nodes: { [key: string]: NodeType }): NodeID[] {
         ids.push(id)
         if (nodes[id].type === "chip") {
             ids.push(...GetAllIds(nodes[id].nodes))
+        } else if (nodes[id].type === "display") {
+            const display = nodes[id] as DisplayType
+            ids.push(...display.inputs, ...display.outputs)
+            if (display.signInput) {
+                ids.push(display.signInput)
+            }
         }
     }
     return ids
@@ -95,6 +107,7 @@ export function remapChip(chip: ChipType): ChipType {
                     ...node,
                     id: newId,
                     inputs: node.inputs.map(mapId),
+                    signInput: node.signInput ? mapId(node.signInput) : null,
                     outputs: node.outputs.map(mapId),
                 }
             } else {

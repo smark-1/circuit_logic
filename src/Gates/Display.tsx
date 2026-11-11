@@ -7,6 +7,7 @@ import {
   DISPLAY_FORMAT_LABELS,
   displayDigitCount,
   displayOverflows,
+  displayPinCount,
   displayText,
 } from "../display.ts";
 import Pin from "../Nodes/Pin.tsx";
@@ -29,12 +30,16 @@ export default function Display(props: {
   onConfigure?: (nodeId: string) => void;
 }) {
   const { nodes } = useContext(nodeContext);
-  const pins = [...props.display.inputs, ...props.display.outputs]
+  const pins = [
+    ...props.display.inputs,
+    ...(props.display.signInput ? [props.display.signInput] : []),
+    ...props.display.outputs,
+  ]
     .map((id) => nodes[id])
     .filter((node): node is NodeType => Boolean(node));
   const overflow = displayOverflows(nodes, props.display);
   const text = displayText(nodes, props.display);
-  const height = displayHeightPx(props.display.inputs.length);
+  const height = displayHeightPx(displayPinCount(props.display));
   const bitLabels = new Map(
     props.display.inputs.map((id, bit) => [id, `b${bit}`]),
   );
@@ -57,7 +62,7 @@ export default function Display(props: {
             {DISPLAY_FORMAT_LABELS[props.display.format]}
           </span>
           <span className={overflow ? "text-red-400" : "text-cyan-700"}>
-            {props.display.inputs.length} bit
+            {props.display.inputs.length} bit{props.display.signInput ? " ±" : ""}
           </span>
         </div>
         <div
@@ -87,7 +92,7 @@ export default function Display(props: {
             on={pin.value}
             onClass={pin.type === "input" ? "bg-red-700" : "bg-green-700"}
             offClass={pin.type === "input" ? "bg-red-300" : "bg-gray-300"}
-            label={bitLabels.get(pin.id) ?? (pin.type === "output" ? "C" : undefined)}
+            label={bitLabels.get(pin.id) ?? (pin.id === props.display.signInput ? "±" : pin.type === "output" ? "C" : undefined)}
           />
         </div>
       ))}

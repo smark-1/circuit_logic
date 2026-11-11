@@ -221,7 +221,11 @@ export function deleteNode(nodes: NodesMap, id: NodeID): NodesMap {
         }
     }
     if (node.type === "display") {
-        for (const ioId of [...node.inputs, ...node.outputs]) {
+        for (const ioId of [
+            ...node.inputs,
+            ...(node.signInput ? [node.signInput] : []),
+            ...node.outputs,
+        ]) {
             removed.add(ioId);
         }
     }

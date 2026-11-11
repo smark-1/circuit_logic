@@ -31,6 +31,8 @@ export interface ChipType extends NodeBaseType {
     outputs: NodeID[];
     nodes: { [key: string]: NodeType };
     name: string;
+    /** Palette chip definition this placed instance came from, if any. */
+    templateId?: NodeID;
 }
 
 export interface NotType extends NodeBaseType {
@@ -44,8 +46,12 @@ export interface DisplayType extends NodeBaseType {
     digits: number;
     /** Whether the carry/overflow output pin is exposed. */
     showCarry: boolean;
+    /** Whether the optional negative-sign input pin is exposed. */
+    showSign: boolean;
     /** Binary data pins, least-significant bit first. */
     inputs: NodeID[];
+    /** Negative-sign input pin, if enabled. */
+    signInput: NodeID | null;
     /** Carry/overflow output pin, if enabled. */
     outputs: NodeID[];
 }
@@ -55,3 +61,11 @@ export type NodeType = InputType | OutputType | ConnectionType | ChipType | NotT
 export type NodesMap = { [key: string]: NodeType };
 
 export type ChipMap = { [key: string]: ChipType };
+
+export type BoardType = {
+    id: NodeID;
+    name: string;
+    nodes: NodesMap;
+};
+
+export type BoardMap = { [key: string]: BoardType };
