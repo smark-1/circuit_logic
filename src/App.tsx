@@ -631,6 +631,7 @@ function App() {
 
     const target = event.target as HTMLElement;
     if (target.closest("[data-delete]")) return;
+    if (target.closest("[data-chip-action]")) return;
 
     const connectionDelete = target.closest<HTMLElement>("[data-delete-connection]");
     if (connectionDelete?.dataset.deleteConnection) {
@@ -864,6 +865,20 @@ function App() {
     }));
   };
 
+  const editPlacedChip = (nodeId: NodeID) => {
+    const node = nodesRef.current[nodeId];
+    if (!node || node.type !== "chip" || !node.templateId) return;
+
+    const template = workspaceRef.current.chips[node.templateId];
+    if (!template) return;
+
+    if (template.builtIn) {
+      setCopyChipId(template.id);
+    } else {
+      openChipEditor(template.id);
+    }
+  };
+
   const saveChip = (name: string) => {
     if (!name.trim()) return;
 
@@ -943,21 +958,31 @@ function App() {
     .map((node) => <Node key={node.id} node={node} />);
   const reactNodes = visibleNodes
     .filter((node) => node.type !== "connection")
-    .map((node) => (
-      <div
-        key={node.id}
-        data-node-id={node.id}
-        data-movable={
-          ["not", "chip", "display"].includes(node.type) ? "true" : undefined
-        }
-      >
-        <Node
-          node={node}
-          handleDelete={handleDelete}
-          handleConfigure={handleConfigureDisplay}
-        />
-      </div>
-    ));
+    .map((node) => {
+      const chipTemplate =
+        node.type === "chip" && node.templateId
+          ? chips[node.templateId]
+          : undefined;
+      return (
+        <div
+          key={node.id}
+          data-node-id={node.id}
+          data-movable={
+            ["not", "chip", "display"].includes(node.type) ? "true" : undefined
+          }
+        >
+          <Node
+            node={node}
+            handleDelete={handleDelete}
+            handleConfigure={handleConfigureDisplay}
+            handleChipAction={chipTemplate ? editPlacedChip : undefined}
+            chipAction={
+              chipTemplate ? (chipTemplate.builtIn ? "copy" : "edit") : undefined
+            }
+          />
+        </div>
+      );
+    });
 
   const reactChips = Object.values(chips).map((chip) => (
     <div
