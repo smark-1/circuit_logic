@@ -23,6 +23,34 @@ export function cloneNodesForEditing(nodes: NodesMap): NodesMap {
 }
 
 /**
+ * External chip pins always sit on the left and right edges of the chip,
+ * spread evenly from top to bottom in pin order. The editor canvas uses
+ * different coordinates than the chip face, so positions have to be
+ * normalized whenever a template is saved.
+ */
+function normalizeChipPinPositions(
+    nodes: NodesMap,
+    inputs: NodeID[],
+    outputs: NodeID[],
+): NodesMap {
+    const next: NodesMap = {...nodes};
+    const place = (ids: NodeID[], leftPercent: number) => {
+        ids.forEach((id, index) => {
+            const node = next[id];
+            if (!node) return;
+            const topPercent =
+                ids.length === 1
+                    ? 50
+                    : 20 + (60 * index) / (ids.length - 1);
+            next[id] = {...node, leftPercent, topPercent} as NodeType;
+        });
+    };
+    place(inputs, 0);
+    place(outputs, 100);
+    return next;
+}
+
+/**
  * Build a saved chip template from edited nodes. Input/output nodes that sit
  * on the editor canvas become the chip's external pins.
  */
@@ -43,16 +71,17 @@ export function chipTemplateFromNodes(
     for (const [nodeId, node] of Object.entries(nodes)) {
         normalized[nodeId] = {...node, onMainCanvas: false} as NodeType;
     }
+    const placed = normalizeChipPinPositions(normalized, inputs, outputs);
 
     if (base) {
-        return {...base, id, name, nodes: normalized, inputs, outputs};
+        return {...base, id, name, nodes: placed, inputs, outputs};
     }
 
     return {
         id,
         type: "chip",
         name,
-        nodes: normalized,
+        nodes: placed,
         inputs,
         outputs,
         leftPercent: 0,
