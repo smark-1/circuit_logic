@@ -10,10 +10,20 @@ export const OFF_CANVAS_CONNECTION_DELAY_MS = 50;
 /** LCD display geometry and configuration bounds. */
 export const DISPLAY_WIDTH = 236;
 export const DISPLAY_MIN_HEIGHT = 148;
+/** Vertical distance between pins in a display column. */
 export const DISPLAY_PIN_GAP = 34;
+/** Extra width for each additional display pin column, including its label. */
+export const DISPLAY_PIN_COLUMN_GAP = 54;
+/** Padding around the display's pin grid. */
+export const DISPLAY_PIN_MARGIN = 18;
+/** Gap between the display's pin grid and the screen. */
+export const DISPLAY_SCREEN_GAP = 16;
 export const DISPLAY_MIN_BITS = 1;
-export const DISPLAY_MAX_BITS = 12;
+export const DISPLAY_MAX_BITS = 40;
+export const DISPLAY_MAX_PIN_ROWS = 6;
 export const DISPLAY_MIN_DIGITS = 1;
 export const DISPLAY_MAX_DIGITS = 12;
-/** Local x offset (percent of display width) for the second pin column. */
-export const DISPLAY_PIN_COLUMN_LEFT = -12;
+
+/** Custom chip pin layout: chips grow so adjacent pins never overlap. */
+export const CHIP_PIN_GAP = 38;
+export const CHIP_PIN_MARGIN = 24;

@@ -2,11 +2,16 @@ import { useContext } from "react";
 import type { DisplayType, NodesMap, NodeType } from "../types.ts";
 import { DISPLAY_WIDTH } from "../constants.ts";
 import { nodeContext } from "../appContext.ts";
-import { displayHeightPx } from "../geometry.ts";
+import {
+  displayHeightPx,
+  displayScreenOffsetPx,
+  displayWidthPx,
+} from "../geometry.ts";
 import {
   DISPLAY_FORMAT_LABELS,
   displayDigitCount,
   displayOverflows,
+  displayPinCount,
   displayText,
 } from "../display.ts";
 import Pin from "../Nodes/Pin.tsx";
@@ -14,7 +19,7 @@ import Pin from "../Nodes/Pin.tsx";
 function screenFontSize(text: string): number {
   return Math.max(
     9,
-    Math.min(30, (DISPLAY_WIDTH - 58) / (Math.max(text.length, 1) * 0.62)),
+    Math.min(30, (DISPLAY_WIDTH - 46) / (Math.max(text.length, 1) * 0.62)),
   );
 }
 
@@ -29,12 +34,19 @@ export default function Display(props: {
   onConfigure?: (nodeId: string) => void;
 }) {
   const { nodes } = useContext(nodeContext);
-  const pins = [...props.display.inputs, ...props.display.outputs]
+  const pins = [
+    ...props.display.inputs,
+    ...(props.display.signInput ? [props.display.signInput] : []),
+    ...props.display.outputs,
+  ]
     .map((id) => nodes[id])
     .filter((node): node is NodeType => Boolean(node));
   const overflow = displayOverflows(nodes, props.display);
   const text = displayText(nodes, props.display);
-  const height = displayHeightPx(props.display.inputs.length);
+  const pinCount = displayPinCount(props.display);
+  const width = displayWidthPx(pinCount);
+  const height = displayHeightPx(pinCount);
+  const screenLeft = displayScreenOffsetPx(pinCount) + 12;
   const bitLabels = new Map(
     props.display.inputs.map((id, bit) => [id, `b${bit}`]),
   );
@@ -42,22 +54,22 @@ export default function Display(props: {
   return (
     <div
       className={
-        "relative rounded-xl border-4 border-slate-500 bg-slate-700 shadow-lg"
+        "group relative rounded-xl border-4 border-slate-500 bg-slate-700 shadow-lg"
       }
-      style={{ width: DISPLAY_WIDTH, height }}
+      style={{ width, height }}
     >
       <div
-        className={`absolute inset-x-3 top-3 rounded-md border-2 bg-[#07140f] px-2 py-1 shadow-inner ${
+        className={`absolute top-3 rounded-md border-2 bg-[#07140f] px-2 py-1 shadow-inner ${
           overflow ? "border-red-500/80" : "border-cyan-950/80"
         }`}
-        style={{ height: 68 }}
+        style={{ left: screenLeft, right: 12, height: 68 }}
       >
         <div className={"flex items-center justify-between font-mono text-[9px] uppercase tracking-wide"}>
           <span className={"text-cyan-600"}>
             {DISPLAY_FORMAT_LABELS[props.display.format]}
           </span>
           <span className={overflow ? "text-red-400" : "text-cyan-700"}>
-            {props.display.inputs.length} bit
+            {props.display.inputs.length} bit{props.display.signInput ? " ±" : ""}
           </span>
         </div>
         <div
@@ -87,7 +99,7 @@ export default function Display(props: {
             on={pin.value}
             onClass={pin.type === "input" ? "bg-red-700" : "bg-green-700"}
             offClass={pin.type === "input" ? "bg-red-300" : "bg-gray-300"}
-            label={bitLabels.get(pin.id) ?? (pin.type === "output" ? "C" : undefined)}
+            label={bitLabels.get(pin.id) ?? (pin.id === props.display.signInput ? "±" : pin.type === "output" ? "C" : undefined)}
           />
         </div>
       ))}
@@ -104,7 +116,7 @@ export default function Display(props: {
         <button
           type="button"
           className={
-            "delete-reveal absolute -left-2 -top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-cyan-600 text-sm font-bold text-white shadow-md transition hover:bg-cyan-500"
+            "delete-reveal absolute -bottom-2 -right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-cyan-600 text-sm font-bold text-white shadow-md transition hover:bg-cyan-500"
           }
           title={"Display settings"}
           onPointerDown={(event) => event.stopPropagation()}

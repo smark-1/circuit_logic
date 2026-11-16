@@ -1,6 +1,7 @@
 import Node from "./Nodes/Node.tsx";
 import {
   type PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -23,20 +24,48 @@ import Chip from "./Gates/Chip.tsx";
 import Not from "./Gates/Not.tsx";
 import defaultChips from "./defaultChips.json";
 import {
-  DISPLAY_WIDTH,
   DRAG_THRESHOLD_PX,
   EDGE_ZONE_PX,
   GATE_SIZE,
   PIN_HIT_SIZE,
 } from "./constants.ts";
-import { clamp, clampPercentFromPx, displayHeightPx } from "./geometry.ts";
+import {
+  chipSize,
+  clamp,
+  clampPercentFromPx,
+  displayHeightPx,
+  displayWidthPx,
+} from "./geometry.ts";
 import {
   DEFAULT_DISPLAY_CONFIG,
   createDisplayNode,
+  displayConfigPinCount,
+  displayPinCount,
   rebuildDisplay,
   type DisplayConfig,
 } from "./display.ts";
-import { DisplayConfigDialog, SaveChipDialog } from "./dialogs.tsx";
+import {
+  ConfirmDialog,
+  DisplayConfigDialog,
+  SaveChipDialog,
+} from "./dialogs.tsx";
+import {
+  applyChipTemplate,
+  chipTemplateFromNodes,
+  cloneNodesForEditing,
+  copyChipTemplate,
+} from "./chipEditing.ts";
+import {
+  activeNodes,
+  createInitialWorkspace,
+  loadWorkspace,
+  nextBoardNumber,
+  saveWorkspace,
+  tabNodes,
+  tabTitle,
+  type TabType,
+  type Workspace,
+} from "./workspace.ts";
 
 type Point = { x: number; y: number };
 type PinRole = "source" | "sink";
@@ -71,10 +100,14 @@ function distance(a: Point, b: Point): number {
 
 function nodeSize(node: NodeType): { width: number; height: number } {
   if (node.type === "display") {
+    const pins = displayPinCount(node);
     return {
-      width: DISPLAY_WIDTH,
-      height: displayHeightPx(node.inputs.length),
+      width: displayWidthPx(pins),
+      height: displayHeightPx(pins),
     };
+  }
+  if (node.type === "chip") {
+    return chipSize(node);
   }
   return { width: GATE_SIZE, height: GATE_SIZE };
 }
@@ -104,49 +137,105 @@ function findSinkAt(clientX: number, clientY: number): NodeID | null {
 }
 
 function App() {
-  const [nodes, setNodes] = useState<NodesMap>({});
-  const [chips, setChips] = useState<ChipMap>(defaultChips as ChipMap);
+  const [workspace, setWorkspaceState] = useState<Workspace>(() =>
+    loadWorkspace(defaultChips as unknown as ChipMap) ??
+    createInitialWorkspace(defaultChips as unknown as ChipMap),
+  );
+  const workspaceRef = useRef(workspace);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [connectPreview, setConnectPreview] = useState<{ from: Point; to: Point } | null>(null);
   const [palettePreview, setPalettePreview] = useState<{ chipId: string; client: Point } | null>(null);
   const [saveChipOpen, setSaveChipOpen] = useState(false);
+  const [copyChipId, setCopyChipId] = useState<NodeID | null>(null);
   const [displayDialog, setDisplayDialog] = useState<DisplayDialogState | null>(null);
+  const [closeTabIndex, setCloseTabIndex] = useState<number | null>(null);
 
+  const boardCounterRef = useRef(nextBoardNumber(workspace));
+  const nodes = activeNodes(workspace);
+  const chips = workspace.chips;
   const nodesRef = useRef(nodes);
-  const chipsRef = useRef(chips);
   const canvasSizeRef = useRef(canvasSize);
   const sessionRef = useRef<DragSession | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const simulationRef = useRef<Simulation | null>(null);
 
+  /** Update the workspace and keep the synchronous ref in step. */
+  const setWorkspace = (updater: (current: Workspace) => Workspace) => {
+    const next = updater(workspaceRef.current);
+    if (next === workspaceRef.current) return;
+    workspaceRef.current = next;
+    setWorkspaceState(next);
+  };
+
+  /** Write the active tab's node map without losing the other tabs. */
+  const applyNodes = (next: NodesMap, markDirty = true) => {
+    nodesRef.current = next;
+    const current = workspaceRef.current;
+    const tab = current.tabs[current.activeIndex];
+    if (!tab) return;
+
+    if (tab.kind === "board") {
+      setWorkspace((ws) => {
+        const board = ws.boards[tab.id];
+        if (!board) return ws;
+        return {
+          ...ws,
+          boards: {...ws.boards, [tab.id]: {...board, nodes: next}},
+        };
+      });
+      return;
+    }
+
+    setWorkspace((ws) => ({
+      ...ws,
+      tabs: ws.tabs.map((candidate, index) =>
+        index === ws.activeIndex && candidate.kind === "chip"
+          ? {...candidate, draft: next, dirty: candidate.dirty || markDirty}
+          : candidate,
+      ),
+    }));
+  };
+
   if (simulationRef.current === null) {
     simulationRef.current = createSimulation({
       getNodes: () => nodesRef.current,
-      applyNodes: (next) => {
-        nodesRef.current = next;
-        setNodes(next);
-      },
+      applyNodes: (next) => applyNodes(next, false),
       getCanvasSize: () => canvasSizeRef.current,
     });
   }
   const simulation = simulationRef.current!;
 
-  /** Keep the simulated nodes and React state in lockstep. */
-  const applyNodes = (next: NodesMap) => {
-    nodesRef.current = next;
-    setNodes(next);
-  };
+  /** React-state compatible setter used by the shared node context. */
+  const setNodes = useCallback<React.Dispatch<React.SetStateAction<NodesMap>>>(
+    (action) => {
+      const previous = nodesRef.current;
+      const next =
+        typeof action === "function"
+          ? (action as (current: NodesMap) => NodesMap)(previous)
+          : action;
+      applyNodes(next);
+    },
+    [],
+  );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
 
-  useEffect(() => {
-    chipsRef.current = chips;
-  }, [chips]);
-
   useEffect(() => () => cleanupRef.current?.(), []);
+
+  // Persist every workspace change (boards, chips, tabs, chip drafts) so a
+  // refresh restores exactly what was on screen.
+  useEffect(() => {
+    saveWorkspace(workspace);
+  }, [workspace]);
+
+  // Restored connections already carry their last value; mark them delivered
+  // so the circuit does not replay stale pulses after a refresh.
+  useEffect(() => {
+    simulation.primeArrivals(nodesRef.current);
+  }, [simulation]);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -212,8 +301,14 @@ function App() {
     const rect = getCanvasRect();
     if (!rect) return;
 
-    const leftPercent = clampPercentFromPx(point.x, GATE_SIZE, rect.width);
-    const topPercent = clampPercentFromPx(point.y, GATE_SIZE, rect.height);
+    const template = chipId === "not" ? null : workspaceRef.current.chips[chipId];
+    if (chipId !== "not" && !template) return;
+
+    const size = template
+      ? chipSize(template)
+      : { width: GATE_SIZE, height: GATE_SIZE };
+    const leftPercent = clampPercentFromPx(point.x, size.width, rect.width);
+    const topPercent = clampPercentFromPx(point.y, size.height, rect.height);
     const id = createId();
     const current = nodesRef.current;
 
@@ -230,7 +325,6 @@ function App() {
       return;
     }
 
-    const template = chipsRef.current[chipId];
     if (!template) return;
 
     const chip = remapChip(template);
@@ -246,6 +340,7 @@ function App() {
       outputs: chip.outputs,
       nodes: chipNodes,
       name: chip.name,
+      templateId: chipId,
       value: false,
     };
 
@@ -261,10 +356,15 @@ function App() {
     const rect = getCanvasRect();
     if (!rect) return;
 
-    const leftPercent = clampPercentFromPx(point.x, DISPLAY_WIDTH, rect.width);
+    const pinCount = displayConfigPinCount(config);
+    const leftPercent = clampPercentFromPx(
+      point.x,
+      displayWidthPx(pinCount),
+      rect.width,
+    );
     const topPercent = clampPercentFromPx(
       point.y,
-      displayHeightPx(config.bits),
+      displayHeightPx(pinCount),
       rect.height,
     );
     const { display, pins } = createDisplayNode(
@@ -285,8 +385,8 @@ function App() {
         config: {
           format: node.format,
           digits: node.digits,
-          bits: node.inputs.length,
           showCarry: node.showCarry,
+          showSign: Boolean(node.showSign),
         },
       });
       return;
@@ -566,6 +666,7 @@ function App() {
 
     const target = event.target as HTMLElement;
     if (target.closest("[data-delete]")) return;
+    if (target.closest("[data-chip-action]")) return;
 
     const connectionDelete = target.closest<HTMLElement>("[data-delete-connection]");
     if (connectionDelete?.dataset.deleteConnection) {
@@ -655,38 +756,236 @@ function App() {
     });
   };
 
+  const settleActiveNodes = () => {
+    const settled = settle(nodesRef.current);
+    if (settled !== nodesRef.current) {
+      applyNodes(settled, false);
+    }
+    return settled;
+  };
+
+  const activateTab = (index: number) => {
+    const current = workspaceRef.current;
+    if (index === current.activeIndex) return;
+
+    const target = current.tabs[index];
+    if (!target) return;
+
+    cleanupRef.current?.();
+    simulation.clear();
+    settleActiveNodes();
+
+    const currentTab = workspaceRef.current.tabs[index];
+    if (!currentTab) return;
+    const targetNodes = tabNodes(workspaceRef.current, currentTab);
+    nodesRef.current = targetNodes;
+    simulation.primeArrivals(targetNodes);
+    setWorkspace((ws) => ({...ws, activeIndex: index}));
+  };
+
+  const addBoard = () => {
+    cleanupRef.current?.();
+    simulation.clear();
+    settleActiveNodes();
+
+    const id = createId();
+    boardCounterRef.current += 1;
+    const board = {
+      id,
+      name: `Board ${boardCounterRef.current}`,
+      nodes: {} as NodesMap,
+    };
+
+    nodesRef.current = {};
+    simulation.primeArrivals({});
+    setWorkspace((ws) => ({
+      ...ws,
+      boards: {...ws.boards, [id]: board},
+      tabs: [...ws.tabs, {kind: "board", id}],
+      activeIndex: ws.tabs.length,
+    }));
+  };
+
+  const performCloseTab = (index: number) => {
+    const current = workspaceRef.current;
+    const tab = current.tabs[index];
+    if (!tab) return;
+
+    const nextTabs = current.tabs.filter((_, candidate) => candidate !== index);
+    if (nextTabs.length === 0) return;
+
+    let nextActive = current.activeIndex;
+    if (current.activeIndex === index) {
+      nextActive = Math.max(0, index - 1);
+    } else if (current.activeIndex > index) {
+      nextActive -= 1;
+    }
+    nextActive = Math.min(nextActive, nextTabs.length - 1);
+
+    const boards = tab.kind === "board"
+      ? Object.fromEntries(
+          Object.entries(current.boards).filter(([id]) => id !== tab.id),
+        )
+      : current.boards;
+
+    if (current.activeIndex === index) {
+      cleanupRef.current?.();
+      simulation.clear();
+      const target = nextTabs[nextActive];
+      const targetNodes = target.kind === "board"
+        ? boards[target.id]?.nodes ?? {}
+        : target.draft;
+      nodesRef.current = targetNodes;
+      simulation.primeArrivals(targetNodes);
+    }
+
+    setWorkspace((ws) => ({
+      ...ws,
+      boards,
+      tabs: nextTabs,
+      activeIndex: nextActive,
+    }));
+    setCloseTabIndex(null);
+  };
+
+  const requestCloseTab = (index: number) => {
+    const current = workspaceRef.current;
+    const tab = current.tabs[index];
+    if (!tab) return;
+
+    if (tab.kind === "board") {
+      const boardTabs = current.tabs.filter(
+        (candidate) => candidate.kind === "board",
+      ).length;
+      if (boardTabs <= 1) return;
+      const hasNodes =
+        Object.keys(current.boards[tab.id]?.nodes ?? {}).length > 0;
+      if (hasNodes) {
+        setCloseTabIndex(index);
+        return;
+      }
+    } else if (tab.dirty) {
+      setCloseTabIndex(index);
+      return;
+    }
+
+    performCloseTab(index);
+  };
+
+  const openChipEditor = (chipId: NodeID) => {
+    const current = workspaceRef.current;
+    const existing = current.tabs.findIndex(
+      (tab) => tab.kind === "chip" && tab.chipId === chipId,
+    );
+    if (existing >= 0) {
+      activateTab(existing);
+      return;
+    }
+
+    const chip = current.chips[chipId];
+    if (!chip || chip.builtIn) return;
+
+    cleanupRef.current?.();
+    simulation.clear();
+    settleActiveNodes();
+
+    const draft = settle(cloneNodesForEditing(chip.nodes));
+    const tab: TabType = {kind: "chip", chipId, draft, dirty: false};
+    nodesRef.current = draft;
+    simulation.primeArrivals(draft);
+    setWorkspace((ws) => ({
+      ...ws,
+      tabs: [...ws.tabs, tab],
+      activeIndex: ws.tabs.length,
+    }));
+  };
+
+  const editPlacedChip = (nodeId: NodeID) => {
+    const node = nodesRef.current[nodeId];
+    if (!node || node.type !== "chip" || !node.templateId) return;
+
+    const template = workspaceRef.current.chips[node.templateId];
+    if (!template) return;
+
+    if (template.builtIn) {
+      setCopyChipId(template.id);
+    } else {
+      openChipEditor(template.id);
+    }
+  };
+
   const saveChip = (name: string) => {
     if (!name.trim()) return;
 
     const current = nodesRef.current;
-    const nodeCopy: NodesMap = {};
-    for (const [nodeId, node] of Object.entries(current)) {
-      nodeCopy[nodeId] = { ...node, onMainCanvas: false } as NodeType;
-    }
-
     const id = createId();
-    const chip: ChipType = {
-      id,
-      type: "chip",
-      nodes: nodeCopy,
-      name,
-      inputs: Object.values(current)
-        .filter((node) => node.type === "input" && node.onMainCanvas)
-        .map((node) => node.id),
-      outputs: Object.values(current)
-        .filter((node) => node.type === "output" && node.onMainCanvas)
-        .map((node) => node.id),
-      onMainCanvas: false,
-      leftPercent: 0,
-      topPercent: 0,
-      value: false,
-    };
+    const chip = chipTemplateFromNodes(name, current, id);
 
     cleanupRef.current?.();
     simulation.clear();
-    setChips((currentChips) => ({ ...currentChips, [id]: chip }));
+    setWorkspace((ws) => ({
+      ...ws,
+      chips: {...ws.chips, [id]: chip},
+    }));
     applyNodes({});
   };
+
+  const saveChipCopy = (name: string) => {
+    if (!name.trim() || !copyChipId) return;
+
+    const base = workspaceRef.current.chips[copyChipId];
+    if (!base) return;
+
+    const id = createId();
+    const copy = copyChipTemplate(base, name.trim(), id);
+    setCopyChipId(null);
+    setWorkspace((ws) => ({
+      ...ws,
+      chips: {...ws.chips, [id]: copy},
+    }));
+    openChipEditor(id);
+  };
+
+  const saveChipChanges = () => {
+    const current = workspaceRef.current;
+    const tab = current.tabs[current.activeIndex];
+    if (!tab || tab.kind !== "chip") return;
+
+    const base = current.chips[tab.chipId];
+    if (!base || base.builtIn) return;
+
+    const template = chipTemplateFromNodes(
+      base.name,
+      tab.draft,
+      base.id,
+      base,
+    );
+    const applied = applyChipTemplate(
+      current.boards,
+      current.chips,
+      tab.chipId,
+      template,
+    );
+
+    cleanupRef.current?.();
+    simulation.clear();
+    nodesRef.current = tab.draft;
+    simulation.primeArrivals(tab.draft);
+    setWorkspace((ws) => ({
+      ...ws,
+      chips: applied.chips,
+      boards: applied.boards,
+      tabs: ws.tabs.map((candidate, index) =>
+        index === ws.activeIndex && candidate.kind === "chip"
+          ? {...candidate, dirty: false}
+          : candidate,
+      ),
+    }));
+  };
+
+  const activeTab = workspace.tabs[workspace.activeIndex];
+  const pendingCloseTab =
+    closeTabIndex !== null ? workspace.tabs[closeTabIndex] : undefined;
 
   const visibleNodes = Object.values(nodes).filter((node) => node.onMainCanvas);
   const reactConnections = visibleNodes
@@ -694,32 +993,60 @@ function App() {
     .map((node) => <Node key={node.id} node={node} />);
   const reactNodes = visibleNodes
     .filter((node) => node.type !== "connection")
-    .map((node) => (
-      <div
-        key={node.id}
-        data-node-id={node.id}
-        data-movable={
-          ["not", "chip", "display"].includes(node.type) ? "true" : undefined
-        }
-      >
-        <Node
-          node={node}
-          handleDelete={handleDelete}
-          handleConfigure={handleConfigureDisplay}
-        />
-      </div>
-    ));
+    .map((node) => {
+      const chipTemplate =
+        node.type === "chip" && node.templateId
+          ? chips[node.templateId]
+          : undefined;
+      return (
+        <div
+          key={node.id}
+          data-node-id={node.id}
+          data-movable={
+            ["not", "chip", "display"].includes(node.type) ? "true" : undefined
+          }
+        >
+          <Node
+            node={node}
+            handleDelete={handleDelete}
+            handleConfigure={handleConfigureDisplay}
+            handleChipAction={chipTemplate ? editPlacedChip : undefined}
+            chipAction={
+              chipTemplate ? (chipTemplate.builtIn ? "copy" : "edit") : undefined
+            }
+          />
+        </div>
+      );
+    });
 
   const reactChips = Object.values(chips).map((chip) => (
     <div
       key={chip.id}
-      className={"shrink-0 cursor-grab touch-pan-x select-none"}
+      className={"group relative shrink-0 cursor-grab touch-pan-x select-none"}
       onPointerDown={(event) => startPaletteDrag(event, chip.id)}
       onContextMenu={(event) => event.preventDefault()}
     >
       <div className={"pointer-events-none"}>
         <Chip chip={chip} />
       </div>
+      <button
+        type={"button"}
+        className={
+          "delete-reveal absolute -right-1 -top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white shadow-md transition hover:bg-sky-500"
+        }
+        title={chip.builtIn ? "Save as copy" : "Edit chip"}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (chip.builtIn) {
+            setCopyChipId(chip.id);
+          } else {
+            openChipEditor(chip.id);
+          }
+        }}
+      >
+        {chip.builtIn ? "⧉" : "✎"}
+      </button>
     </div>
   ));
 
@@ -769,12 +1096,16 @@ function App() {
     </div>,
   );
 
-  const nodeContextValue = useMemo(() => ({ nodes, setNodes }), [nodes]);
+  const nodeContextValue = useMemo(() => ({ nodes, setNodes }), [nodes, setNodes]);
   const canvasContextValue = useMemo(
     () => ({ width: canvasSize.width, height: canvasSize.height }),
     [canvasSize.width, canvasSize.height],
   );
   const previewChip = palettePreview ? chips[palettePreview.chipId] : undefined;
+  const previewSize = previewChip
+    ? chipSize(previewChip)
+    : { width: GATE_SIZE, height: GATE_SIZE };
+  const copyChip = copyChipId ? chips[copyChipId] : undefined;
 
   return (
     <nodeContext.Provider value={nodeContextValue}>
@@ -785,25 +1116,103 @@ function App() {
               Circuit Logic
             </p>
             <div className={"flex gap-2"}>
-              <button
-                type="button"
-                className={"rounded-md bg-blue-500 p-2 text-xs text-white uppercase md:text-sm"}
-                onClick={() => setSaveChipOpen(true)}
-              >
-                Save chip
-              </button>
-              <button
-                type="button"
-                className={"rounded-md bg-red-700 p-2 text-xs text-white uppercase md:text-sm"}
-                onClick={() => {
-                  cleanupRef.current?.();
-                  simulation.clear();
-                  applyNodes({});
-                }}
-              >
-                Clear
-              </button>
+              {activeTab?.kind === "chip" ? (
+                <button
+                  type="button"
+                  className={"rounded-md bg-blue-500 p-2 text-xs text-white uppercase md:text-sm"}
+                  onClick={saveChipChanges}
+                >
+                  Save changes
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={"rounded-md bg-blue-500 p-2 text-xs text-white uppercase md:text-sm"}
+                    onClick={() => setSaveChipOpen(true)}
+                  >
+                    Save chip
+                  </button>
+                  <button
+                    type="button"
+                    className={"rounded-md bg-red-700 p-2 text-xs text-white uppercase md:text-sm"}
+                    onClick={() => {
+                      cleanupRef.current?.();
+                      simulation.clear();
+                      applyNodes({});
+                    }}
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
             </div>
+          </div>
+
+          <div
+            className={
+              "flex items-end gap-1 overflow-x-auto px-2 pt-2 md:px-8"
+            }
+          >
+            {workspace.tabs.map((tab, index) => {
+              const isActive = index === workspace.activeIndex;
+              const dirty = tab.kind === "chip" && tab.dirty;
+              const boardCount = workspace.tabs.filter(
+                (candidate) => candidate.kind === "board",
+              ).length;
+              const closable =
+                tab.kind === "chip" || boardCount > 1;
+              const key =
+                tab.kind === "board"
+                  ? `board-${tab.id}`
+                  : `chip-${tab.chipId}`;
+
+              return (
+                <div
+                  key={key}
+                  className={
+                    "flex shrink-0 items-center gap-1 rounded-t-md border-b-2 px-2 py-1.5 " +
+                    (isActive
+                      ? "border-sky-400 bg-slate-700 text-slate-100"
+                      : "border-transparent bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200")
+                  }
+                >
+                  <button
+                    type={"button"}
+                    className={"max-w-40 cursor-pointer truncate text-xs font-medium md:text-sm"}
+                    title={tabTitle(workspace, tab)}
+                    onClick={() => activateTab(index)}
+                  >
+                    {tab.kind === "chip" ? "✎ " : ""}
+                    {tabTitle(workspace, tab)}
+                    {dirty ? " •" : ""}
+                  </button>
+                  {closable && (
+                    <button
+                      type={"button"}
+                      className={
+                        "flex h-5 w-5 items-center justify-center rounded text-sm leading-none text-slate-400 transition hover:bg-slate-600 hover:text-white"
+                      }
+                      title={"Close tab"}
+                      aria-label={"Close tab"}
+                      onClick={() => requestCloseTab(index)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            <button
+              type={"button"}
+              className={
+                "mb-0.5 ml-1 shrink-0 rounded-md bg-slate-700 px-2 py-1 text-xs font-medium text-slate-200 transition hover:bg-slate-600 md:text-sm"
+              }
+              onClick={addBoard}
+              title={"Add board"}
+            >
+              + Board
+            </button>
           </div>
 
           <div className={"flex min-h-0 flex-1 flex-col gap-2 p-2 md:flex-row md:p-8 md:pt-2"}>
@@ -854,7 +1263,7 @@ function App() {
             >
               <div
                 className={"flex items-center justify-center rounded-lg bg-gray-600/90 p-4 text-center text-xl text-gray-50"}
-                style={{ width: GATE_SIZE, height: GATE_SIZE }}
+                style={{ width: previewSize.width, height: previewSize.height }}
               >
                 {palettePreview.chipId === "not"
                   ? "NOT"
@@ -865,13 +1274,43 @@ function App() {
             </div>
           )}
 
-          {saveChipOpen && (
+          {copyChip && (
+            <SaveChipDialog
+              title={"Save chip as copy"}
+              initialName={`${copyChip.name} copy`}
+              submitLabel={"Save copy"}
+              onCancel={() => setCopyChipId(null)}
+              onSave={saveChipCopy}
+            />
+          )}
+
+          {saveChipOpen && activeTab?.kind === "board" && (
             <SaveChipDialog
               onCancel={() => setSaveChipOpen(false)}
               onSave={(name) => {
                 setSaveChipOpen(false);
                 saveChip(name);
               }}
+            />
+          )}
+
+          {closeTabIndex !== null && pendingCloseTab && (
+            <ConfirmDialog
+              title={
+                pendingCloseTab.kind === "chip"
+                  ? "Discard chip changes?"
+                  : "Close board?"
+              }
+              message={
+                pendingCloseTab.kind === "chip"
+                  ? "This chip has unsaved changes. Closing the tab will discard them."
+                  : "This board has components on it. Closing it will discard everything on the board."
+              }
+              confirmLabel={
+                pendingCloseTab.kind === "chip" ? "Discard changes" : "Close board"
+              }
+              onCancel={() => setCloseTabIndex(null)}
+              onConfirm={() => performCloseTab(closeTabIndex)}
             />
           )}
 

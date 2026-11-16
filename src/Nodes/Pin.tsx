@@ -20,7 +20,7 @@ export default function Pin(props: {
     <div
       data-node-id={props.nodeId}
       data-pin-role={props.role}
-      className={`relative flex touch-none items-center justify-center ${props.className ?? ""}`}
+      className={`flex touch-none items-center justify-center ${props.className ?? "relative"}`}
       style={{ width: PIN_HIT_SIZE, height: PIN_HIT_SIZE }}
     >
       <div

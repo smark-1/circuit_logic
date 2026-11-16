@@ -4,18 +4,20 @@ import Node from "../Nodes/Node.tsx";
 import { MiniDisplay } from "./Display.tsx";
 import { useContext } from "react";
 import { nodeContext } from "../appContext.ts";
+import { chipHeightForCounts, chipPinTopPercent } from "../geometry.ts";
 
 function fallbackPin(
   id: NodeID,
   type: "input" | "output",
   index: number,
   total: number,
+  height: number,
 ): NodeType {
   return {
     id,
     type,
     leftPercent: type === "input" ? 0 : 100,
-    topPercent: ((index + 1) / (total + 1)) * 100,
+    topPercent: chipPinTopPercent(index, total, height),
     onMainCanvas: false,
     value: false,
   };
@@ -23,16 +25,20 @@ function fallbackPin(
 
 export default function Chip(props: { chip: ChipType }) {
   const nodesContext = useContext(nodeContext);
+  const height = chipHeightForCounts(
+    props.chip.inputs.length,
+    props.chip.outputs.length,
+  );
   const ioNodes = [
     ...props.chip.inputs.map((id, index) =>
       nodesContext.nodes[id] ??
       props.chip.nodes[id] ??
-      fallbackPin(id, "input", index, props.chip.inputs.length),
+      fallbackPin(id, "input", index, props.chip.inputs.length, height),
     ),
     ...props.chip.outputs.map((id, index) =>
       nodesContext.nodes[id] ??
       props.chip.nodes[id] ??
-      fallbackPin(id, "output", index, props.chip.outputs.length),
+      fallbackPin(id, "output", index, props.chip.outputs.length, height),
     ),
   ];
 
@@ -55,7 +61,7 @@ export default function Chip(props: { chip: ChipType }) {
       className={
         "relative flex items-center justify-center rounded-lg bg-gray-600/90"
       }
-      style={{ width: GATE_SIZE, height: GATE_SIZE }}
+      style={{ width: GATE_SIZE, height }}
     >
       {displays.map((display) => {
         const top =

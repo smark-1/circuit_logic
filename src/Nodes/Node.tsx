@@ -11,6 +11,8 @@ export default function Node(props: {
   isChipIO?: boolean;
   handleDelete?: (nodeId: string) => void;
   handleConfigure?: (nodeId: string) => void;
+  handleChipAction?: (nodeId: string) => void;
+  chipAction?: "edit" | "copy";
   label?: string;
 }) {
   let element = <p>el</p>;
@@ -76,6 +78,26 @@ export default function Node(props: {
       }}
     >
       {element}
+      {!props.isChipIO &&
+        props.node.type === "chip" &&
+        props.handleChipAction &&
+        props.chipAction && (
+          <button
+            type="button"
+            data-chip-action
+            className={
+              "delete-reveal absolute -top-2 -left-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white shadow-md transition hover:bg-sky-500"
+            }
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              props.handleChipAction?.(props.node.id);
+            }}
+            title={props.chipAction === "copy" ? "Save as copy" : "Edit chip"}
+          >
+            {props.chipAction === "copy" ? "⧉" : "✎"}
+          </button>
+        )}
       {!props.isChipIO && props.handleDelete && (
         <button
           type="button"
