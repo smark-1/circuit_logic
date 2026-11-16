@@ -58,6 +58,9 @@ import {
 import {
   activeNodes,
   createInitialWorkspace,
+  loadWorkspace,
+  nextBoardNumber,
+  saveWorkspace,
   tabNodes,
   tabTitle,
   type TabType,
@@ -135,6 +138,7 @@ function findSinkAt(clientX: number, clientY: number): NodeID | null {
 
 function App() {
   const [workspace, setWorkspaceState] = useState<Workspace>(() =>
+    loadWorkspace(defaultChips as unknown as ChipMap) ??
     createInitialWorkspace(defaultChips as unknown as ChipMap),
   );
   const workspaceRef = useRef(workspace);
@@ -147,7 +151,7 @@ function App() {
   const [displayDialog, setDisplayDialog] = useState<DisplayDialogState | null>(null);
   const [closeTabIndex, setCloseTabIndex] = useState<number | null>(null);
 
-  const boardCounterRef = useRef(1);
+  const boardCounterRef = useRef(nextBoardNumber(workspace));
   const nodes = activeNodes(workspace);
   const chips = workspace.chips;
   const nodesRef = useRef(nodes);
@@ -220,6 +224,18 @@ function App() {
   }, [nodes]);
 
   useEffect(() => () => cleanupRef.current?.(), []);
+
+  // Persist every workspace change (boards, chips, tabs, chip drafts) so a
+  // refresh restores exactly what was on screen.
+  useEffect(() => {
+    saveWorkspace(workspace);
+  }, [workspace]);
+
+  // Restored connections already carry their last value; mark them delivered
+  // so the circuit does not replay stale pulses after a refresh.
+  useEffect(() => {
+    simulation.primeArrivals(nodesRef.current);
+  }, [simulation]);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
