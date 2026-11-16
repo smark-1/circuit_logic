@@ -4,6 +4,7 @@ import Pin from "./Pin.tsx";
 export default function OutputNode(props: {
   node: OutputType;
   pinRole: "source" | "sink";
+  label?: string;
 }) {
   return (
     <Pin
@@ -12,6 +13,7 @@ export default function OutputNode(props: {
       on={props.node.value}
       onClass="bg-green-700"
       offClass="bg-gray-300"
+      label={props.label}
     />
   );
 }

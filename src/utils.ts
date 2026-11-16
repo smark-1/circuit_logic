@@ -1,5 +1,5 @@
-import {ChipType, NodeID, NodeType, NodesMap} from "./types.ts";
-import {GATE_SIZE} from "./constants.ts";
+import {ChipType, DisplayType, NodeID, NodeType, NodesMap} from "./types.ts";
+import {chipSize, displayHeightPx, displayWidthPx} from "./geometry.ts";
 
 export function createId(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -11,10 +11,11 @@ export function createId(): string {
 export function getNodes(nodes: NodesMap, canvasWidth: number, canvasHeight: number): NodesMap {
     const nodesList: NodesMap = {...nodes}
 
-    const chipPercentWidth = canvasWidth > 0 ? GATE_SIZE / canvasWidth * 100 : 0
-    const chipPercentHeight = canvasHeight > 0 ? GATE_SIZE / canvasHeight * 100 : 0
-
     Object.values(nodesList).filter(node => node.type === "chip").forEach((node: ChipType) => {
+        const size = chipSize(node)
+        const chipPercentWidth = canvasWidth > 0 ? size.width / canvasWidth * 100 : 0
+        const chipPercentHeight = canvasHeight > 0 ? size.height / canvasHeight * 100 : 0
+
         Object.values(node.nodes).filter(node => ['input', 'output'].includes(node.type))
             .forEach((IOnode: NodeType) => {
                 nodesList[IOnode.id] = {
@@ -23,6 +24,26 @@ export function getNodes(nodes: NodesMap, canvasWidth: number, canvasHeight: num
                     topPercent: node.topPercent - chipPercentHeight / 2 + IOnode.topPercent * chipPercentHeight / 100
                 }
             })
+    })
+
+    Object.values(nodesList).filter(node => node.type === "display").forEach((display: DisplayType) => {
+        const displayPins = [
+            ...display.inputs,
+            ...(display.signInput ? [display.signInput] : []),
+            ...display.outputs,
+        ];
+        const displayInputCount = display.inputs.length + (display.signInput ? 1 : 0)
+        const displayPercentWidth = canvasWidth > 0 ? displayWidthPx(displayInputCount) / canvasWidth * 100 : 0
+        const displayPercentHeight = canvasHeight > 0 ? displayHeightPx(displayInputCount) / canvasHeight * 100 : 0
+        for (const pinId of displayPins) {
+            const pin = nodesList[pinId]
+            if (!pin) continue
+            nodesList[pinId] = {
+                ...pin,
+                leftPercent: display.leftPercent - displayPercentWidth / 2 + pin.leftPercent * displayPercentWidth / 100,
+                topPercent: display.topPercent - displayPercentHeight / 2 + pin.topPercent * displayPercentHeight / 100,
+            }
+        }
     })
     return nodesList
 }
@@ -34,6 +55,12 @@ export function GetAllIds(nodes: { [key: string]: NodeType }): NodeID[] {
         ids.push(id)
         if (nodes[id].type === "chip") {
             ids.push(...GetAllIds(nodes[id].nodes))
+        } else if (nodes[id].type === "display") {
+            const display = nodes[id] as DisplayType
+            ids.push(...display.inputs, ...display.outputs)
+            if (display.signInput) {
+                ids.push(display.signInput)
+            }
         }
     }
     return ids
@@ -74,6 +101,14 @@ export function remapChip(chip: ChipType): ChipType {
                     inputs: node.inputs.map(mapId),
                     outputs: node.outputs.map(mapId),
                     nodes: remapNodes(node.nodes),
+                }
+            } else if (node.type === "display") {
+                next[newId] = {
+                    ...node,
+                    id: newId,
+                    inputs: node.inputs.map(mapId),
+                    signInput: node.signInput ? mapId(node.signInput) : null,
+                    outputs: node.outputs.map(mapId),
                 }
             } else {
                 next[newId] = {...node, id: newId}

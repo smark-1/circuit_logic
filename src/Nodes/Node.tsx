@@ -4,11 +4,16 @@ import OutputNode from "./OutputNode.tsx";
 import ConnectionNode from "./ConnectionNode.tsx";
 import Chip from "../Gates/Chip.tsx";
 import Not from "../Gates/Not.tsx";
+import Display from "../Gates/Display.tsx";
 
 export default function Node(props: {
   node: NodeType;
   isChipIO?: boolean;
   handleDelete?: (nodeId: string) => void;
+  handleConfigure?: (nodeId: string) => void;
+  handleChipAction?: (nodeId: string) => void;
+  chipAction?: "edit" | "copy";
+  label?: string;
 }) {
   let element = <p>el</p>;
   switch (props.node.type) {
@@ -17,6 +22,7 @@ export default function Node(props: {
         <InputNode
           node={props.node}
           pinRole={props.isChipIO ? "sink" : "source"}
+          label={props.label}
         />
       );
       break;
@@ -25,6 +31,7 @@ export default function Node(props: {
         <OutputNode
           node={props.node}
           pinRole={props.isChipIO ? "source" : "sink"}
+          label={props.label}
         />
       );
       break;
@@ -38,6 +45,15 @@ export default function Node(props: {
       break;
     case "not":
       element = <Not not={props.node} />;
+      break;
+    case "display":
+      element = (
+        <Display
+          display={props.node}
+          onConfigure={props.handleConfigure}
+        />
+      );
+      break;
   }
 
   if (props.node.type === "connection") {
@@ -62,6 +78,26 @@ export default function Node(props: {
       }}
     >
       {element}
+      {!props.isChipIO &&
+        props.node.type === "chip" &&
+        props.handleChipAction &&
+        props.chipAction && (
+          <button
+            type="button"
+            data-chip-action
+            className={
+              "delete-reveal absolute -top-2 -left-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white shadow-md transition hover:bg-sky-500"
+            }
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              props.handleChipAction?.(props.node.id);
+            }}
+            title={props.chipAction === "copy" ? "Save as copy" : "Edit chip"}
+          >
+            {props.chipAction === "copy" ? "⧉" : "✎"}
+          </button>
+        )}
       {!props.isChipIO && props.handleDelete && (
         <button
           type="button"

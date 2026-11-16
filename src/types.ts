@@ -1,7 +1,9 @@
 export type NodeID = string;
 
+export type DisplayFormat = 'decimal' | 'hex' | 'binary';
+
 export type NodeBaseType = {
-    type: 'input' | 'output' | "connection" | "chip" | "not";
+    type: 'input' | 'output' | "connection" | "chip" | "not" | "display";
     id: NodeID;
     leftPercent: number;
     topPercent: number;
@@ -29,14 +31,43 @@ export interface ChipType extends NodeBaseType {
     outputs: NodeID[];
     nodes: { [key: string]: NodeType };
     name: string;
+    /** Palette chip definition this placed instance came from, if any. */
+    templateId?: NodeID;
+    /** Built-in chips ship with the app and can only be copied, not edited. */
+    builtIn?: boolean;
 }
 
 export interface NotType extends NodeBaseType {
     type: 'not';
 }
 
-export type NodeType = InputType | OutputType | ConnectionType | ChipType | NotType;
+export interface DisplayType extends NodeBaseType {
+    type: 'display';
+    format: DisplayFormat;
+    /** Number of character positions on the LCD. */
+    digits: number;
+    /** Whether the carry/overflow output pin is exposed. */
+    showCarry: boolean;
+    /** Whether the optional negative-sign input pin is exposed. */
+    showSign: boolean;
+    /** Binary data pins, least-significant bit first. */
+    inputs: NodeID[];
+    /** Negative-sign input pin, if enabled. */
+    signInput: NodeID | null;
+    /** Carry/overflow output pin, if enabled. */
+    outputs: NodeID[];
+}
+
+export type NodeType = InputType | OutputType | ConnectionType | ChipType | NotType | DisplayType;
 
 export type NodesMap = { [key: string]: NodeType };
 
 export type ChipMap = { [key: string]: ChipType };
+
+export type BoardType = {
+    id: NodeID;
+    name: string;
+    nodes: NodesMap;
+};
+
+export type BoardMap = { [key: string]: BoardType };
