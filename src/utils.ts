@@ -1,6 +1,5 @@
 import {ChipType, DisplayType, NodeID, NodeType, NodesMap} from "./types.ts";
-import {DISPLAY_WIDTH, GATE_SIZE} from "./constants.ts";
-import {displayHeightPx} from "./geometry.ts";
+import {chipSize, displayHeightPx, displayWidthPx} from "./geometry.ts";
 
 export function createId(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -12,10 +11,11 @@ export function createId(): string {
 export function getNodes(nodes: NodesMap, canvasWidth: number, canvasHeight: number): NodesMap {
     const nodesList: NodesMap = {...nodes}
 
-    const chipPercentWidth = canvasWidth > 0 ? GATE_SIZE / canvasWidth * 100 : 0
-    const chipPercentHeight = canvasHeight > 0 ? GATE_SIZE / canvasHeight * 100 : 0
-
     Object.values(nodesList).filter(node => node.type === "chip").forEach((node: ChipType) => {
+        const size = chipSize(node)
+        const chipPercentWidth = canvasWidth > 0 ? size.width / canvasWidth * 100 : 0
+        const chipPercentHeight = canvasHeight > 0 ? size.height / canvasHeight * 100 : 0
+
         Object.values(node.nodes).filter(node => ['input', 'output'].includes(node.type))
             .forEach((IOnode: NodeType) => {
                 nodesList[IOnode.id] = {
@@ -26,7 +26,6 @@ export function getNodes(nodes: NodesMap, canvasWidth: number, canvasHeight: num
             })
     })
 
-    const displayPercentWidth = canvasWidth > 0 ? DISPLAY_WIDTH / canvasWidth * 100 : 0
     Object.values(nodesList).filter(node => node.type === "display").forEach((display: DisplayType) => {
         const displayPins = [
             ...display.inputs,
@@ -34,6 +33,7 @@ export function getNodes(nodes: NodesMap, canvasWidth: number, canvasHeight: num
             ...display.outputs,
         ];
         const displayInputCount = display.inputs.length + (display.signInput ? 1 : 0)
+        const displayPercentWidth = canvasWidth > 0 ? displayWidthPx(displayInputCount) / canvasWidth * 100 : 0
         const displayPercentHeight = canvasHeight > 0 ? displayHeightPx(displayInputCount) / canvasHeight * 100 : 0
         for (const pinId of displayPins) {
             const pin = nodesList[pinId]

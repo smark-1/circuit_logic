@@ -24,13 +24,18 @@ import Chip from "./Gates/Chip.tsx";
 import Not from "./Gates/Not.tsx";
 import defaultChips from "./defaultChips.json";
 import {
-  DISPLAY_WIDTH,
   DRAG_THRESHOLD_PX,
   EDGE_ZONE_PX,
   GATE_SIZE,
   PIN_HIT_SIZE,
 } from "./constants.ts";
-import { clamp, clampPercentFromPx, displayHeightPx } from "./geometry.ts";
+import {
+  chipSize,
+  clamp,
+  clampPercentFromPx,
+  displayHeightPx,
+  displayWidthPx,
+} from "./geometry.ts";
 import {
   DEFAULT_DISPLAY_CONFIG,
   createDisplayNode,
@@ -92,10 +97,14 @@ function distance(a: Point, b: Point): number {
 
 function nodeSize(node: NodeType): { width: number; height: number } {
   if (node.type === "display") {
+    const pins = displayPinCount(node);
     return {
-      width: DISPLAY_WIDTH,
-      height: displayHeightPx(displayPinCount(node)),
+      width: displayWidthPx(pins),
+      height: displayHeightPx(pins),
     };
+  }
+  if (node.type === "chip") {
+    return chipSize(node);
   }
   return { width: GATE_SIZE, height: GATE_SIZE };
 }
@@ -276,8 +285,14 @@ function App() {
     const rect = getCanvasRect();
     if (!rect) return;
 
-    const leftPercent = clampPercentFromPx(point.x, GATE_SIZE, rect.width);
-    const topPercent = clampPercentFromPx(point.y, GATE_SIZE, rect.height);
+    const template = chipId === "not" ? null : workspaceRef.current.chips[chipId];
+    if (chipId !== "not" && !template) return;
+
+    const size = template
+      ? chipSize(template)
+      : { width: GATE_SIZE, height: GATE_SIZE };
+    const leftPercent = clampPercentFromPx(point.x, size.width, rect.width);
+    const topPercent = clampPercentFromPx(point.y, size.height, rect.height);
     const id = createId();
     const current = nodesRef.current;
 
@@ -294,7 +309,6 @@ function App() {
       return;
     }
 
-    const template = workspaceRef.current.chips[chipId];
     if (!template) return;
 
     const chip = remapChip(template);
@@ -326,10 +340,15 @@ function App() {
     const rect = getCanvasRect();
     if (!rect) return;
 
-    const leftPercent = clampPercentFromPx(point.x, DISPLAY_WIDTH, rect.width);
+    const pinCount = displayConfigPinCount(config);
+    const leftPercent = clampPercentFromPx(
+      point.x,
+      displayWidthPx(pinCount),
+      rect.width,
+    );
     const topPercent = clampPercentFromPx(
       point.y,
-      displayHeightPx(displayConfigPinCount(config)),
+      displayHeightPx(pinCount),
       rect.height,
     );
     const { display, pins } = createDisplayNode(
@@ -1067,6 +1086,9 @@ function App() {
     [canvasSize.width, canvasSize.height],
   );
   const previewChip = palettePreview ? chips[palettePreview.chipId] : undefined;
+  const previewSize = previewChip
+    ? chipSize(previewChip)
+    : { width: GATE_SIZE, height: GATE_SIZE };
   const copyChip = copyChipId ? chips[copyChipId] : undefined;
 
   return (
@@ -1225,7 +1247,7 @@ function App() {
             >
               <div
                 className={"flex items-center justify-center rounded-lg bg-gray-600/90 p-4 text-center text-xl text-gray-50"}
-                style={{ width: GATE_SIZE, height: GATE_SIZE }}
+                style={{ width: previewSize.width, height: previewSize.height }}
               >
                 {palettePreview.chipId === "not"
                   ? "NOT"

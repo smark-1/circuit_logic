@@ -1,9 +1,12 @@
 import {
     DISPLAY_MAX_DIGITS,
     DISPLAY_MIN_DIGITS,
-    DISPLAY_WIDTH,
 } from "./constants.ts";
-import { displayHeightPx, displayInputPinPosition } from "./geometry.ts";
+import {
+    displayHeightPx,
+    displayInputPinPosition,
+    displayWidthPx,
+} from "./geometry.ts";
 import { createId } from "./utils.ts";
 import type {
     DisplayFormat,
@@ -133,7 +136,7 @@ export function displayText(
 
 export function displaySize(display: Pick<DisplayType, "inputs" | "signInput">) {
     return {
-        width: DISPLAY_WIDTH,
+        width: displayWidthPx(displayPinCount(display)),
         height: displayHeightPx(displayPinCount(display)),
     };
 }

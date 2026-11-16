@@ -2,7 +2,11 @@ import { useContext } from "react";
 import type { DisplayType, NodesMap, NodeType } from "../types.ts";
 import { DISPLAY_WIDTH } from "../constants.ts";
 import { nodeContext } from "../appContext.ts";
-import { displayHeightPx } from "../geometry.ts";
+import {
+  displayHeightPx,
+  displayScreenOffsetPx,
+  displayWidthPx,
+} from "../geometry.ts";
 import {
   DISPLAY_FORMAT_LABELS,
   displayDigitCount,
@@ -15,7 +19,7 @@ import Pin from "../Nodes/Pin.tsx";
 function screenFontSize(text: string): number {
   return Math.max(
     9,
-    Math.min(30, (DISPLAY_WIDTH - 58) / (Math.max(text.length, 1) * 0.62)),
+    Math.min(30, (DISPLAY_WIDTH - 46) / (Math.max(text.length, 1) * 0.62)),
   );
 }
 
@@ -39,7 +43,10 @@ export default function Display(props: {
     .filter((node): node is NodeType => Boolean(node));
   const overflow = displayOverflows(nodes, props.display);
   const text = displayText(nodes, props.display);
-  const height = displayHeightPx(displayPinCount(props.display));
+  const pinCount = displayPinCount(props.display);
+  const width = displayWidthPx(pinCount);
+  const height = displayHeightPx(pinCount);
+  const screenLeft = displayScreenOffsetPx(pinCount) + 12;
   const bitLabels = new Map(
     props.display.inputs.map((id, bit) => [id, `b${bit}`]),
   );
@@ -49,13 +56,13 @@ export default function Display(props: {
       className={
         "group relative rounded-xl border-4 border-slate-500 bg-slate-700 shadow-lg"
       }
-      style={{ width: DISPLAY_WIDTH, height }}
+      style={{ width, height }}
     >
       <div
-        className={`absolute inset-x-3 top-3 rounded-md border-2 bg-[#07140f] px-2 py-1 shadow-inner ${
+        className={`absolute top-3 rounded-md border-2 bg-[#07140f] px-2 py-1 shadow-inner ${
           overflow ? "border-red-500/80" : "border-cyan-950/80"
         }`}
-        style={{ height: 68 }}
+        style={{ left: screenLeft, right: 12, height: 68 }}
       >
         <div className={"flex items-center justify-between font-mono text-[9px] uppercase tracking-wide"}>
           <span className={"text-cyan-600"}>
@@ -109,7 +116,7 @@ export default function Display(props: {
         <button
           type="button"
           className={
-            "delete-reveal absolute -left-2 -top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-cyan-600 text-sm font-bold text-white shadow-md transition hover:bg-cyan-500"
+            "delete-reveal absolute -bottom-2 -right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-cyan-600 text-sm font-bold text-white shadow-md transition hover:bg-cyan-500"
           }
           title={"Display settings"}
           onPointerDown={(event) => event.stopPropagation()}

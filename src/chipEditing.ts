@@ -7,6 +7,7 @@ import type {
     NodesMap,
     NodeType,
 } from "./types.ts";
+import { chipHeightForCounts, chipPinTopPercent } from "./geometry.ts";
 import { GetAllIds, createId, remapChip } from "./utils.ts";
 
 /**
@@ -24,9 +25,10 @@ export function cloneNodesForEditing(nodes: NodesMap): NodesMap {
 
 /**
  * External chip pins always sit on the left and right edges of the chip,
- * spread evenly from top to bottom in pin order. The editor canvas uses
- * different coordinates than the chip face, so positions have to be
- * normalized whenever a template is saved.
+ * spread with a fixed gap from top to bottom in pin order. The chip face
+ * grows with the pin count, so the positions are derived from the same
+ * helpers that size and render the chip. The editor canvas uses different
+ * coordinates than the chip face, so positions are normalized on save.
  */
 function normalizeChipPinPositions(
     nodes: NodesMap,
@@ -34,15 +36,16 @@ function normalizeChipPinPositions(
     outputs: NodeID[],
 ): NodesMap {
     const next: NodesMap = {...nodes};
+    const height = chipHeightForCounts(inputs.length, outputs.length);
     const place = (ids: NodeID[], leftPercent: number) => {
         ids.forEach((id, index) => {
             const node = next[id];
             if (!node) return;
-            const topPercent =
-                ids.length === 1
-                    ? 50
-                    : 20 + (60 * index) / (ids.length - 1);
-            next[id] = {...node, leftPercent, topPercent} as NodeType;
+            next[id] = {
+                ...node,
+                leftPercent,
+                topPercent: chipPinTopPercent(index, ids.length, height),
+            } as NodeType;
         });
     };
     place(inputs, 0);
