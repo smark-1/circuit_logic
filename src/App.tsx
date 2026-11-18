@@ -148,6 +148,7 @@ function App() {
   const [palettePreview, setPalettePreview] = useState<{ chipId: string; client: Point } | null>(null);
   const [saveChipOpen, setSaveChipOpen] = useState(false);
   const [copyChipId, setCopyChipId] = useState<NodeID | null>(null);
+  const [deleteChipId, setDeleteChipId] = useState<NodeID | null>(null);
   const [displayDialog, setDisplayDialog] = useState<DisplayDialogState | null>(null);
   const [closeTabIndex, setCloseTabIndex] = useState<number | null>(null);
 
@@ -983,9 +984,34 @@ function App() {
     }));
   };
 
+  const confirmDeleteChip = () => {
+    const current = workspaceRef.current;
+    const chipId = deleteChipId;
+    if (!chipId) return;
+
+    const chip = current.chips[chipId];
+    setDeleteChipId(null);
+    if (!chip || chip.builtIn) return;
+
+    const tabIndex = current.tabs.findIndex(
+      (tab) => tab.kind === "chip" && tab.chipId === chipId,
+    );
+    if (tabIndex >= 0) {
+      performCloseTab(tabIndex);
+    }
+
+    setWorkspace((ws) => {
+      const chips = {...ws.chips};
+      delete chips[chipId];
+      return {...ws, chips};
+    });
+  };
+
   const activeTab = workspace.tabs[workspace.activeIndex];
   const pendingCloseTab =
     closeTabIndex !== null ? workspace.tabs[closeTabIndex] : undefined;
+  const pendingDeleteChip =
+    deleteChipId !== null ? chips[deleteChipId] : undefined;
 
   const visibleNodes = Object.values(nodes).filter((node) => node.onMainCanvas);
   const reactConnections = visibleNodes
@@ -1029,6 +1055,23 @@ function App() {
       <div className={"pointer-events-none"}>
         <Chip chip={chip} />
       </div>
+      {!chip.builtIn && (
+        <button
+          type={"button"}
+          className={
+            "delete-reveal absolute -left-1 -top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-red-600 text-sm font-bold text-white shadow-md transition hover:bg-red-500"
+          }
+          title={"Delete chip"}
+          aria-label={`Delete ${chip.name}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            setDeleteChipId(chip.id);
+          }}
+        >
+          ×
+        </button>
+      )}
       <button
         type={"button"}
         className={
@@ -1311,6 +1354,16 @@ function App() {
               }
               onCancel={() => setCloseTabIndex(null)}
               onConfirm={() => performCloseTab(closeTabIndex)}
+            />
+          )}
+
+          {pendingDeleteChip && (
+            <ConfirmDialog
+              title={"Delete chip?"}
+              message={`Delete "${pendingDeleteChip.name}"? The chip will be removed from the sidebar and cannot be restored.`}
+              confirmLabel={"Delete chip"}
+              onCancel={() => setDeleteChipId(null)}
+              onConfirm={confirmDeleteChip}
             />
           )}
 
