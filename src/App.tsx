@@ -51,6 +51,7 @@ import {
 } from "./dialogs.tsx";
 import {
   applyChipTemplate,
+  chipContainsChip,
   chipTemplateFromNodes,
   cloneNodesForEditing,
   copyChipTemplate,
@@ -134,6 +135,25 @@ function findSinkAt(clientX: number, clientY: number): NodeID | null {
   const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
   const sink = element?.closest<HTMLElement>("[data-sink-id]");
   return sink?.dataset.sinkId ?? null;
+}
+
+/** Why a palette chip cannot be placed in the currently open chip editor. */
+function recursionReason(
+  chipId: NodeID,
+  editingChipId: NodeID | null,
+  chips: ChipMap,
+): string | null {
+  if (!editingChipId) return null;
+  const chip = chips[chipId];
+  if (!chip) return null;
+  if (chipId === editingChipId) {
+    return "A chip can't be placed inside itself.";
+  }
+  if (chipContainsChip(chipId, editingChipId, chips)) {
+    const editingName = chips[editingChipId]?.name ?? "the chip being edited";
+    return `${chip.name} already contains ${editingName}, so placing it here would be recursive.`;
+  }
+  return null;
 }
 
 function App() {
@@ -302,7 +322,12 @@ function App() {
     const rect = getCanvasRect();
     if (!rect) return;
 
-    const template = chipId === "not" ? null : workspaceRef.current.chips[chipId];
+    const workspaceNow = workspaceRef.current;
+    const activeNow = workspaceNow.tabs[workspaceNow.activeIndex];
+    const editingId = activeNow?.kind === "chip" ? activeNow.chipId : null;
+    if (recursionReason(chipId, editingId, workspaceNow.chips)) return;
+
+    const template = chipId === "not" ? null : workspaceNow.chips[chipId];
     if (chipId !== "not" && !template) return;
 
     const size = template
@@ -746,6 +771,14 @@ function App() {
   ) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
+    const workspaceNow = workspaceRef.current;
+    const activeNow = workspaceNow.tabs[workspaceNow.activeIndex];
+    const editingId = activeNow?.kind === "chip" ? activeNow.chipId : null;
+    if (recursionReason(chipId, editingId, workspaceNow.chips)) {
+      event.preventDefault();
+      return;
+    }
+
     const client = { x: event.clientX, y: event.clientY };
     beginSession({
       kind: "palette",
@@ -1045,53 +1078,71 @@ function App() {
       );
     });
 
-  const reactChips = Object.values(chips).map((chip) => (
-    <div
-      key={chip.id}
-      className={"group relative shrink-0 cursor-grab touch-pan-x select-none"}
-      onPointerDown={(event) => startPaletteDrag(event, chip.id)}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      <div className={"pointer-events-none"}>
-        <Chip chip={chip} />
-      </div>
-      {!chip.builtIn && (
+  const editingChipId = activeTab?.kind === "chip" ? activeTab.chipId : null;
+  const reactChips = Object.values(chips).map((chip) => {
+    const reason = recursionReason(chip.id, editingChipId, chips);
+    return (
+      <div
+        key={chip.id}
+        className={
+          "group relative shrink-0 touch-pan-x select-none " +
+          (reason ? "cursor-not-allowed opacity-40" : "cursor-grab")
+        }
+        title={reason ?? undefined}
+        aria-disabled={reason ? true : undefined}
+        onPointerDown={reason ? undefined : (event) => startPaletteDrag(event, chip.id)}
+        onContextMenu={(event) => event.preventDefault()}
+      >
+        <div className={"pointer-events-none"}>
+          <Chip chip={chip} />
+        </div>
+        {reason && (
+          <span
+            className={
+              "pointer-events-none absolute -bottom-1 left-1/2 -translate-x-1/2 rounded bg-red-700 px-1 text-[8px] font-semibold uppercase text-white"
+            }
+          >
+            recursive
+          </span>
+        )}
+        {!chip.builtIn && (
+          <button
+            type={"button"}
+            className={
+              "delete-reveal absolute -left-1 -top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-red-600 text-sm font-bold text-white shadow-md transition hover:bg-red-500"
+            }
+            title={"Delete chip"}
+            aria-label={`Delete ${chip.name}`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              setDeleteChipId(chip.id);
+            }}
+          >
+            ×
+          </button>
+        )}
         <button
           type={"button"}
           className={
-            "delete-reveal absolute -left-1 -top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-red-600 text-sm font-bold text-white shadow-md transition hover:bg-red-500"
+            "delete-reveal absolute -right-1 -top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white shadow-md transition hover:bg-sky-500"
           }
-          title={"Delete chip"}
-          aria-label={`Delete ${chip.name}`}
+          title={chip.builtIn ? "Save as copy" : "Edit chip"}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
-            setDeleteChipId(chip.id);
+            if (chip.builtIn) {
+              setCopyChipId(chip.id);
+            } else {
+              openChipEditor(chip.id);
+            }
           }}
         >
-          ×
+          {chip.builtIn ? "⧉" : "✎"}
         </button>
-      )}
-      <button
-        type={"button"}
-        className={
-          "delete-reveal absolute -right-1 -top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white shadow-md transition hover:bg-sky-500"
-        }
-        title={chip.builtIn ? "Save as copy" : "Edit chip"}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => {
-          event.stopPropagation();
-          if (chip.builtIn) {
-            setCopyChipId(chip.id);
-          } else {
-            openChipEditor(chip.id);
-          }
-        }}
-      >
-        {chip.builtIn ? "⧉" : "✎"}
-      </button>
-    </div>
-  ));
+      </div>
+    );
+  });
 
   reactChips.push(
     <div

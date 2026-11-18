@@ -308,3 +308,47 @@ export function applyChipTemplate(
 
     return {boards: nextBoards, chips: nextChips, boardsChanged};
 }
+
+/**
+ * Palette chip IDs referenced anywhere inside a chip definition, including
+ * inline nested chips that have no palette entry of their own.
+ */
+export function chipDependencies(chip: ChipType, chips: ChipMap): Set<NodeID> {
+    const deps = new Set<NodeID>();
+    const visit = (nodes: NodesMap) => {
+        for (const node of Object.values(nodes)) {
+            if (node.type !== "chip") continue;
+            if (node.templateId && chips[node.templateId]) {
+                deps.add(node.templateId);
+            }
+            visit(node.nodes);
+        }
+    };
+    visit(chip.nodes);
+    return deps;
+}
+
+/**
+ * True when `chipId` is `targetId` or contains it somewhere in its own
+ * definition. Placing such a chip inside the target would close a cycle.
+ */
+export function chipContainsChip(
+    chipId: NodeID,
+    targetId: NodeID,
+    chips: ChipMap,
+): boolean {
+    const visited = new Set<NodeID>();
+    const queue: NodeID[] = [chipId];
+    while (queue.length > 0) {
+        const id = queue.shift()!;
+        if (id === targetId) return true;
+        if (visited.has(id)) continue;
+        visited.add(id);
+        const chip = chips[id];
+        if (!chip) continue;
+        for (const dep of chipDependencies(chip, chips)) {
+            if (!visited.has(dep)) queue.push(dep);
+        }
+    }
+    return false;
+}
