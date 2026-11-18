@@ -11,14 +11,37 @@ import { chipHeightForCounts, chipPinTopPercent } from "./geometry.ts";
 import { GetAllIds, createId, remapChip } from "./utils.ts";
 
 /**
- * A chip editor works on a live copy of the chip's internals. Every node is
- * on the main canvas so the normal board editing gestures apply; saving turns
- * them back into off-canvas template nodes.
+ * IDs owned by nested chips. Templates carry a flat copy of every nested
+ * chip's internals as well as the nested chip itself; showing both in the
+ * editor draws each pin and wire twice. getNodes() also snaps chip pins to
+ * their chip face, so the flat copies appear to jump back while dragging.
+ */
+function nestedChipIds(nodes: NodesMap): Set<NodeID> {
+    const ids = new Set<NodeID>();
+    for (const node of Object.values(nodes)) {
+        if (node.type === "chip") {
+            for (const id of GetAllIds(node.nodes)) {
+                ids.add(id);
+            }
+        }
+    }
+    return ids;
+}
+
+/**
+ * A chip editor works on a live copy of the chip's internals. Top-level nodes
+ * go on the main canvas so the normal board editing gestures apply; nodes that
+ * belong to a nested chip stay off-canvas, since the nested chip renders them
+ * itself. Saving turns everything back into off-canvas template nodes.
  */
 export function cloneNodesForEditing(nodes: NodesMap): NodesMap {
+    const nestedIds = nestedChipIds(nodes);
     const next: NodesMap = {};
     for (const [id, node] of Object.entries(nodes)) {
-        next[id] = {...node, onMainCanvas: true} as NodeType;
+        next[id] = {
+            ...node,
+            onMainCanvas: !nestedIds.has(id),
+        } as NodeType;
     }
     return next;
 }
@@ -284,4 +307,48 @@ export function applyChipTemplate(
     }
 
     return {boards: nextBoards, chips: nextChips, boardsChanged};
+}
+
+/**
+ * Palette chip IDs referenced anywhere inside a chip definition, including
+ * inline nested chips that have no palette entry of their own.
+ */
+export function chipDependencies(chip: ChipType, chips: ChipMap): Set<NodeID> {
+    const deps = new Set<NodeID>();
+    const visit = (nodes: NodesMap) => {
+        for (const node of Object.values(nodes)) {
+            if (node.type !== "chip") continue;
+            if (node.templateId && chips[node.templateId]) {
+                deps.add(node.templateId);
+            }
+            visit(node.nodes);
+        }
+    };
+    visit(chip.nodes);
+    return deps;
+}
+
+/**
+ * True when `chipId` is `targetId` or contains it somewhere in its own
+ * definition. Placing such a chip inside the target would close a cycle.
+ */
+export function chipContainsChip(
+    chipId: NodeID,
+    targetId: NodeID,
+    chips: ChipMap,
+): boolean {
+    const visited = new Set<NodeID>();
+    const queue: NodeID[] = [chipId];
+    while (queue.length > 0) {
+        const id = queue.shift()!;
+        if (id === targetId) return true;
+        if (visited.has(id)) continue;
+        visited.add(id);
+        const chip = chips[id];
+        if (!chip) continue;
+        for (const dep of chipDependencies(chip, chips)) {
+            if (!visited.has(dep)) queue.push(dep);
+        }
+    }
+    return false;
 }
